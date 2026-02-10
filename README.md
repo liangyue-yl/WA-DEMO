@@ -21,6 +21,7 @@ For this repository, it should be:
 
 `https://liangyue-yl.github.io/WA-DEMO/`
 
-If this is the first Pages deployment for the repo, open:
+The workflow attempts to auto-enable Pages on first deploy. If your repository
+policy blocks that, enable it manually in:
 
 `Settings -> Pages -> Build and deployment -> Source = GitHub Actions`

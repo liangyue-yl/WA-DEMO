@@ -21,7 +21,7 @@ For this repository, it should be:
 
 `https://liangyue-yl.github.io/WA-DEMO/`
 
-The workflow attempts to auto-enable Pages on first deploy. If your repository
-policy blocks that, enable it manually in:
+Because GitHub restricts first-time Pages enablement to repository admins, you
+must do a one-time setup before automatic deploy works:
 
 `Settings -> Pages -> Build and deployment -> Source = GitHub Actions`

@@ -21,13 +21,15 @@ const createMessage = (payload) => ({
   ...payload,
 });
 
-const createInitialListMessage = () =>
+const createAssistantButtonMessage = () =>
   createMessage({
     sender: "ai",
-    kind: "listMessage",
+    kind: "ctaButtons",
     agentName: "Ignite Agent",
-    text: "Choose a service assistant to continue.",
-    buttonLabel: "查看菜单",
+    title: "Choose your service assistant",
+    text: "Select one quick action below to continue.",
+    cta1Label: "AI sales assistant",
+    cta2Label: "Business Processing Assistant",
   });
 
 const getAdvisoryReply = (question) => {
@@ -76,9 +78,8 @@ function Icon({ children, viewBox = "0 0 24 24" }) {
 }
 
 function App() {
-  const [messages, setMessages] = useState(() => [createInitialListMessage()]);
+  const [messages, setMessages] = useState(() => [createAssistantButtonMessage()]);
   const [mode, setMode] = useState("idle");
-  const [listSheetOpen, setListSheetOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [flowData, setFlowData] = useState({ ...flowDefaults });
   const [flowMounted, setFlowMounted] = useState(false);
@@ -104,7 +105,7 @@ function App() {
     if (mode === "structured") {
       return "Structured mode active. Tap quote card to continue.";
     }
-    return "Open list menu to choose a mode.";
+    return "Tap Menu to open quick actions.";
   }, [isTyping, mode]);
 
   useEffect(() => {
@@ -157,7 +158,6 @@ function App() {
   };
 
   const handleSelectUnstructured = () => {
-    setListSheetOpen(false);
     setMode("unstructured");
     appendMessage(
       {
@@ -170,7 +170,6 @@ function App() {
   };
 
   const handleSelectStructured = () => {
-    setListSheetOpen(false);
     setMode("structured");
     appendMessage({
       sender: "ai",
@@ -212,9 +211,20 @@ function App() {
   };
 
   const openFlow = () => {
-    setListSheetOpen(false);
     setFlowMounted(true);
     queueTimer(() => setFlowVisible(true), 16);
+  };
+
+  const showAssistantButtons = () => {
+    appendMessage({
+      sender: "ai",
+      kind: "ctaButtons",
+      agentName: "Ignite Agent",
+      title: "Choose your service assistant",
+      text: "Select one quick action below to continue.",
+      cta1Label: "AI sales assistant",
+      cta2Label: "Business Processing Assistant",
+    });
   };
 
   const closeFlow = () => {
@@ -236,14 +246,31 @@ function App() {
   };
 
   const renderMessage = (message) => {
-    if (message.kind === "listMessage") {
+    if (message.kind === "ctaButtons") {
       return (
-        <article className="listMessageCard">
-          <span className="listAgent">{message.agentName}</span>
-          <p>{message.text}</p>
-          <button type="button" className="listViewButton" onClick={() => setListSheetOpen(true)}>
-            {message.buttonLabel}
-          </button>
+        <article className="ctaTemplateCard">
+          <div className="ctaTemplateBody">
+            <span className="listAgent">{message.agentName}</span>
+            <h3 className="ctaTitle">{message.title}</h3>
+            <p>{message.text}</p>
+            <span className="ctaTime">{message.time}</span>
+          </div>
+
+          <div className="ctaButtonList">
+            <button type="button" className="ctaButtonRow" onClick={handleSelectUnstructured}>
+              <span className="ctaButtonIcon" aria-hidden="true">
+                ↗
+              </span>
+              <span>{message.cta1Label}</span>
+            </button>
+
+            <button type="button" className="ctaButtonRow" onClick={handleSelectStructured}>
+              <span className="ctaButtonIcon" aria-hidden="true">
+                ☎
+              </span>
+              <span>{message.cta2Label}</span>
+            </button>
+          </div>
         </article>
       );
     }
@@ -361,7 +388,7 @@ function App() {
 
             {messages.length === 0 ? (
               <div className="emptyState">
-                <p>点击“查看菜单”选择助手模式。</p>
+                <p>Tap Menu to choose assistant mode.</p>
               </div>
             ) : (
               messages.map((message) => (
@@ -428,50 +455,13 @@ function App() {
             ) : null}
           </main>
 
-          {listSheetOpen ? (
-            <button
-              type="button"
-              className="listSheetBackdrop"
-              aria-label="Close menu"
-              onClick={() => setListSheetOpen(false)}
-            />
-          ) : null}
-
-          <section
-            className={`listSheet ${listSheetOpen ? "listSheetVisible" : ""}`}
-            aria-label="Assistant list view"
-          >
-            <header className="listSheetHeader">
-              <h3>Ignite Agent</h3>
-              <p>List view</p>
-            </header>
-
-            <button type="button" className="listSheetOption" onClick={handleSelectUnstructured}>
-              <span className="optionBadge greenBadge" aria-hidden="true" />
-              <span className="optionText">
-                <span className="optionTitle">AI 销售助手 (Unstructured)</span>
-                <span className="optionSubtitle">Terms Q&A + 销售指导</span>
-              </span>
-              <span className="optionChevron">›</span>
-            </button>
-
-            <button type="button" className="listSheetOption" onClick={handleSelectStructured}>
-              <span className="optionBadge blueBadge" aria-hidden="true" />
-              <span className="optionText">
-                <span className="optionTitle">业务办理助手 (Structured)</span>
-                <span className="optionSubtitle">保单查询、报价、理赔</span>
-              </span>
-              <span className="optionChevron">›</span>
-            </button>
-          </section>
-
           <footer className="chatComposer">
             <button
               type="button"
               className="menuButton"
-              onClick={() => setListSheetOpen(true)}
+              onClick={showAssistantButtons}
             >
-              查看菜单
+              Menu
             </button>
 
             {mode === "unstructured" ? (

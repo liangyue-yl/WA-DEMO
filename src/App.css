@@ -328,6 +328,42 @@ body {
   font-size: 15px;
 }
 
+.listMessageCard {
+  display: grid;
+  gap: 8px;
+}
+
+.listMessageCard p {
+  margin: 0;
+  color: #374151;
+}
+
+.listAgent {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.listViewButton {
+  border: 0;
+  width: fit-content;
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  background: #0f766e;
+  cursor: pointer;
+}
+
+.listViewButton:hover {
+  background: #115e59;
+}
+
 .quoteCardTop {
   display: flex;
   flex-direction: column;
@@ -397,6 +433,22 @@ body {
   animation-delay: 0.36s;
 }
 
+.systemRow {
+  justify-content: center;
+}
+
+.systemNotice {
+  display: inline-block;
+  max-width: 90%;
+  border-radius: 10px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #475569;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(203, 213, 225, 0.75);
+}
+
+.listSheetBackdrop,
 .menuBackdrop {
   position: absolute;
   inset: 0;
@@ -406,6 +458,7 @@ body {
   z-index: 12;
 }
 
+.listSheet,
 .menuPopover {
   position: absolute;
   left: 14px;
@@ -426,12 +479,30 @@ body {
     transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
+.listSheetVisible,
 .menuPopoverVisible {
   opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
 }
 
+.listSheetHeader {
+  padding: 6px 4px 8px;
+}
+
+.listSheetHeader h3 {
+  margin: 0;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.listSheetHeader p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.listSheetOption,
 .menuOption {
   border: 0;
   border-radius: 12px;
@@ -445,13 +516,31 @@ body {
   cursor: pointer;
 }
 
+.listSheetOption:hover,
 .menuOption:hover {
   background: #e5e7eb;
+}
+
+.optionBadge {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.greenBadge {
+  background: #22c55e;
+}
+
+.blueBadge {
+  background: #3b82f6;
 }
 
 .optionText {
   display: grid;
   gap: 2px;
+  margin-left: 10px;
+  margin-right: auto;
 }
 
 .optionTitle {
@@ -735,6 +824,10 @@ body {
   animation: messageInRight 0.24s cubic-bezier(0.2, 0.9, 0.35, 1);
 }
 
+.messageEntering.systemRow .systemNotice {
+  animation: messageInCenter 0.22s cubic-bezier(0.2, 0.9, 0.35, 1);
+}
+
 @keyframes messageInLeft {
   from {
     opacity: 0;
@@ -750,6 +843,17 @@ body {
   from {
     opacity: 0;
     transform: translateY(7px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes messageInCenter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
   }
   to {
     opacity: 1;

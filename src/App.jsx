@@ -18,9 +18,17 @@ const createMessage = (payload) => ({
   id: ++messageId,
   time: formatChatTime(),
   entering: true,
-  status: payload.sender === "user" ? "read" : "sent",
   ...payload,
 });
+
+const createInitialListMessage = () =>
+  createMessage({
+    sender: "ai",
+    kind: "listMessage",
+    agentName: "Ignite Agent",
+    text: "Choose a service assistant to continue.",
+    buttonLabel: "查看菜单",
+  });
 
 const getAdvisoryReply = (question) => {
   const lowerQuestion = question.toLowerCase();
@@ -68,9 +76,9 @@ function Icon({ children, viewBox = "0 0 24 24" }) {
 }
 
 function App() {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => [createInitialListMessage()]);
   const [mode, setMode] = useState("idle");
-  const [showMenu, setShowMenu] = useState(false);
+  const [listSheetOpen, setListSheetOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [flowData, setFlowData] = useState({ ...flowDefaults });
   const [flowMounted, setFlowMounted] = useState(false);
@@ -91,12 +99,12 @@ function App() {
     if (mode === "unstructured") {
       return isTyping
         ? "Advisor is typing..."
-        : "Natural language mode is active.";
+        : "AI consultation mode is active.";
     }
     if (mode === "structured") {
-      return "Structured mode active. Open the quote card in chat.";
+      return "Structured mode active. Tap quote card to continue.";
     }
-    return "Tap Menu to choose a mode.";
+    return "Open list menu to choose a mode.";
   }, [isTyping, mode]);
 
   useEffect(() => {
@@ -149,30 +157,28 @@ function App() {
   };
 
   const handleSelectUnstructured = () => {
+    setListSheetOpen(false);
     setMode("unstructured");
-    setShowMenu(false);
-    queueAiMessage(
+    appendMessage(
       {
-        kind: "text",
-        text: "Hello, I am your AI insurance advisor. Ask me anything about policy terms, exclusions, or plan comparisons.",
+        sender: "system",
+        kind: "system",
+        text: "已切换至 AI 咨询模式",
       },
-      700,
+      { animate: true },
     );
   };
 
   const handleSelectStructured = () => {
+    setListSheetOpen(false);
     setMode("structured");
-    setShowMenu(false);
-    queueAiMessage(
-      {
-        kind: "quoteCard",
-        title: "Start Quote",
-        description:
-          "Use the guided flow to collect age, vehicle type, and desired coverage amount.",
-        buttonLabel: "Get Quote",
-      },
-      640,
-    );
+    appendMessage({
+      sender: "ai",
+      kind: "quoteCard",
+      title: "业务办理助手 (Structured)",
+      description: "保单查询、报价、理赔",
+      buttonLabel: "立即报价",
+    });
   };
 
   const handleSendMessage = () => {
@@ -206,7 +212,7 @@ function App() {
   };
 
   const openFlow = () => {
-    setShowMenu(false);
+    setListSheetOpen(false);
     setFlowMounted(true);
     queueTimer(() => setFlowVisible(true), 16);
   };
@@ -222,7 +228,7 @@ function App() {
     queueAiMessage(
       {
         kind: "text",
-        text: `Quote request submitted for age ${flowData.age}, ${flowData.carModel}, coverage ${flowData.coverage}. A licensed advisor will contact you shortly with pricing options.`,
+        text: `报价请求已提交：年龄 ${flowData.age}，车型 ${flowData.carModel}，保额 ${flowData.coverage}。顾问会尽快联系你。`,
       },
       760,
     );
@@ -230,6 +236,18 @@ function App() {
   };
 
   const renderMessage = (message) => {
+    if (message.kind === "listMessage") {
+      return (
+        <article className="listMessageCard">
+          <span className="listAgent">{message.agentName}</span>
+          <p>{message.text}</p>
+          <button type="button" className="listViewButton" onClick={() => setListSheetOpen(true)}>
+            {message.buttonLabel}
+          </button>
+        </article>
+      );
+    }
+
     if (message.kind === "quoteCard") {
       return (
         <article className="quoteCard">
@@ -245,31 +263,7 @@ function App() {
       );
     }
 
-    return (
-      <>
-        <p>{message.text}</p>
-        <div
-          className={`messageMeta ${
-            message.sender === "user" ? "userMeta" : "aiMeta"
-          }`}
-        >
-          <span>{message.time}</span>
-          {message.sender === "user" ? (
-            <span className="doubleCheck">
-              <Icon viewBox="0 0 16 16">
-                <path
-                  d="M2.4 8.4L5.1 11L8.4 7.6M6.8 8.3L9.5 11L13.6 6.8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Icon>
-            </span>
-          ) : null}
-        </div>
-      </>
-    );
+    return <p>{message.text}</p>;
   };
 
   return (
@@ -301,7 +295,7 @@ function App() {
               </div>
 
               <div className="titleStack">
-                <h1>Insurance Advisor</h1>
+                <h1>Ignite Agent</h1>
                 <p>{isTyping ? "typing..." : "online"}</p>
               </div>
 
@@ -367,24 +361,57 @@ function App() {
 
             {messages.length === 0 ? (
               <div className="emptyState">
-                <p>Select a mode from Menu to begin.</p>
+                <p>点击“查看菜单”选择助手模式。</p>
               </div>
             ) : (
               messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`messageRow ${
-                    message.sender === "user" ? "userRow" : "aiRow"
-                  } ${message.entering ? "messageEntering" : ""}`}
-                >
+                message.kind === "system" ? (
                   <div
-                    className={`bubble ${
-                      message.sender === "user" ? "userBubble" : "aiBubble"
+                    key={message.id}
+                    className={`messageRow systemRow ${
+                      message.entering ? "messageEntering" : ""
                     }`}
                   >
-                    {renderMessage(message)}
+                    <span className="systemNotice">{message.text}</span>
                   </div>
-                </div>
+                ) : (
+                  <div
+                    key={message.id}
+                    className={`messageRow ${
+                      message.sender === "user" ? "userRow" : "aiRow"
+                    } ${message.entering ? "messageEntering" : ""}`}
+                  >
+                    <div
+                      className={`bubble ${
+                        message.sender === "user" ? "userBubble" : "aiBubble"
+                      }`}
+                    >
+                      {renderMessage(message)}
+                      {message.kind === "text" ? (
+                        <div
+                          className={`messageMeta ${
+                            message.sender === "user" ? "userMeta" : "aiMeta"
+                          }`}
+                        >
+                          <span>{message.time}</span>
+                          {message.sender === "user" ? (
+                            <span className="doubleCheck">
+                              <Icon viewBox="0 0 16 16">
+                                <path
+                                  d="M2.4 8.4L5.1 11L8.4 7.6M6.8 8.3L9.5 11L13.6 6.8"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </Icon>
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                )
               ))
             )}
 
@@ -401,31 +428,38 @@ function App() {
             ) : null}
           </main>
 
-          {showMenu ? (
+          {listSheetOpen ? (
             <button
               type="button"
-              className="menuBackdrop"
+              className="listSheetBackdrop"
               aria-label="Close menu"
-              onClick={() => setShowMenu(false)}
+              onClick={() => setListSheetOpen(false)}
             />
           ) : null}
 
           <section
-            className={`menuPopover ${showMenu ? "menuPopoverVisible" : ""}`}
-            aria-label="Mode options"
+            className={`listSheet ${listSheetOpen ? "listSheetVisible" : ""}`}
+            aria-label="Assistant list view"
           >
-            <button type="button" className="menuOption" onClick={handleSelectUnstructured}>
+            <header className="listSheetHeader">
+              <h3>Ignite Agent</h3>
+              <p>List view</p>
+            </header>
+
+            <button type="button" className="listSheetOption" onClick={handleSelectUnstructured}>
+              <span className="optionBadge greenBadge" aria-hidden="true" />
               <span className="optionText">
-                <span className="optionTitle">Consult AI Advisor</span>
-                <span className="optionSubtitle">Unstructured mode</span>
+                <span className="optionTitle">AI 销售助手 (Unstructured)</span>
+                <span className="optionSubtitle">Terms Q&A + 销售指导</span>
               </span>
               <span className="optionChevron">›</span>
             </button>
 
-            <button type="button" className="menuOption" onClick={handleSelectStructured}>
+            <button type="button" className="listSheetOption" onClick={handleSelectStructured}>
+              <span className="optionBadge blueBadge" aria-hidden="true" />
               <span className="optionText">
-                <span className="optionTitle">Enter Business Service</span>
-                <span className="optionSubtitle">Structured mode</span>
+                <span className="optionTitle">业务办理助手 (Structured)</span>
+                <span className="optionSubtitle">保单查询、报价、理赔</span>
               </span>
               <span className="optionChevron">›</span>
             </button>
@@ -435,9 +469,9 @@ function App() {
             <button
               type="button"
               className="menuButton"
-              onClick={() => setShowMenu((open) => !open)}
+              onClick={() => setListSheetOpen(true)}
             >
-              Menu
+              查看菜单
             </button>
 
             {mode === "unstructured" ? (
@@ -553,8 +587,8 @@ function App() {
                       </Icon>
                     </button>
                     <div>
-                      <h2 className="flowTitle">Get Quote</h2>
-                      <p className="flowCaption">WhatsApp native flow</p>
+                      <h2 className="flowTitle">立即报价</h2>
+                      <p className="flowCaption">WhatsApp Flow</p>
                     </div>
                   </div>
                 </header>

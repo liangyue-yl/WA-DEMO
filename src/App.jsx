@@ -39,21 +39,18 @@ const createApplicationDefaults = (occupation = "") => ({
   coveragePeriod: "1 year",
 });
 
-const isHighRiskOccupation = (occupationText) =>
-  /外卖|骑手|delivery|courier|rider/i.test(occupationText);
-
 const getAdvisoryReply = (question) => {
   const lowerQuestion = question.toLowerCase();
 
   if (lowerQuestion.includes("premium") || lowerQuestion.includes("price")) {
-    return "For delivery riders, Personal Accident plans usually balance affordability and medical reimbursement. A common benchmark is around CNY 199 per year for core coverage.";
+    return "For Personal Accident insurance, a common starter benchmark is around CNY 199 per year for core protection, depending on occupation risk class.";
   }
 
   if (lowerQuestion.includes("coverage") || lowerQuestion.includes("benefit")) {
     return "The recommended baseline includes death/disability benefit and accidental medical reimbursement. For higher-risk occupations, increasing death/disability coverage to 1,000,000 CNY is often safer.";
   }
 
-  return "For Personal Accident insurance, focus on occupation class, accidental medical limits, and disability payout ratio. If you share your riding distance and working hours, I can suggest a more precise plan.";
+  return "For Personal Accident insurance, focus on occupation class, accidental medical limits, and disability payout ratio. If you share your work pattern and exposure, I can suggest a more precise plan.";
 };
 
 function Icon({ children, viewBox = "0 0 24 24" }) {
@@ -176,7 +173,9 @@ function App() {
     );
   };
 
-  const showHighRiskLeadTransfer = (occupation) => {
+  const showLeadTransfer = (occupation) => {
+    const normalizedOccupation = occupation.trim();
+
     queueTimer(() => {
       appendMessage({
         sender: "system",
@@ -189,7 +188,7 @@ function App() {
       appendMessage({
         sender: "agent",
         kind: "text",
-        text: "I am your advisor. This is a Personal Accident plan tailored for delivery riders. Please review it.",
+        text: `I am your advisor. This is a Personal Accident plan tailored for your occupation (${normalizedOccupation}). Please review it.`,
       });
     }, 1000);
 
@@ -198,7 +197,7 @@ function App() {
         sender: "agent",
         kind: "quoteCard",
         title: "Personal Accident Quote",
-        description: `${occupation} protection package`,
+        description: `${normalizedOccupation} protection package`,
         buttonLabel: "View Quote",
       });
     }, 1450);
@@ -237,18 +236,7 @@ function App() {
     if (awaitingOccupation) {
       setAwaitingOccupation(false);
       setCapturedOccupation(cleanedText);
-
-      if (isHighRiskOccupation(cleanedText)) {
-        showHighRiskLeadTransfer(cleanedText);
-      } else {
-        queueAiMessage(
-          {
-            kind: "text",
-            text: `Thanks. We have recorded occupation as ${cleanedText}. You can ask me about PA coverage and pricing now.`,
-          },
-          850,
-        );
-      }
+      showLeadTransfer(cleanedText);
       return;
     }
 
@@ -346,11 +334,13 @@ function App() {
 
   const handleSelectPaymentMethod = (method) => {
     setSelectedPaymentMethod(method);
-    setPaymentState("processing");
+    queueTimer(() => {
+      setPaymentState("processing");
+    }, 220);
 
     queueTimer(() => {
       setPaymentState("success");
-    }, 1000);
+    }, 1220);
 
     queueTimer(() => {
       closeFlow();
@@ -359,7 +349,7 @@ function App() {
         kind: "text",
         text: `Payment Successful via ${method}. Your Personal Accident e-policy will be shared in this chat shortly.`,
       });
-    }, 2500);
+    }, 2720);
   };
 
   const renderMessage = (message) => {
@@ -899,20 +889,42 @@ function App() {
                   paymentState === "choose" ? (
                     <section className="flowStatusPane">
                       <h3 className="flowSectionTitle">Step 4 · Select payment method</h3>
-                      <div className="paymentMethodGrid">
+                      <div className="paymentCardList">
                         <button
                           type="button"
-                          className="paymentMethodButton"
+                          className={`paymentOptionCard ${
+                            selectedPaymentMethod === "WhatsApp" ? "selectedPaymentOption" : ""
+                          }`}
                           onClick={() => handleSelectPaymentMethod("WhatsApp")}
                         >
-                          WhatsApp
+                          <span className="paymentOptionIcon whatsappPayIcon">W</span>
+                          <span className="paymentOptionText">
+                            <span className="paymentOptionTitle">WhatsApp</span>
+                            <span className="paymentOptionSubtitle">
+                              Pay with WhatsApp integrated checkout
+                            </span>
+                          </span>
+                          <span className="paymentOptionCheck" aria-hidden="true">
+                            {selectedPaymentMethod === "WhatsApp" ? "✓" : "○"}
+                          </span>
                         </button>
                         <button
                           type="button"
-                          className="paymentMethodButton"
+                          className={`paymentOptionCard ${
+                            selectedPaymentMethod === "GPay" ? "selectedPaymentOption" : ""
+                          }`}
                           onClick={() => handleSelectPaymentMethod("GPay")}
                         >
-                          GPay
+                          <span className="paymentOptionIcon gpayIcon">G</span>
+                          <span className="paymentOptionText">
+                            <span className="paymentOptionTitle">GPay</span>
+                            <span className="paymentOptionSubtitle">
+                              Fast payment with Google Pay
+                            </span>
+                          </span>
+                          <span className="paymentOptionCheck" aria-hidden="true">
+                            {selectedPaymentMethod === "GPay" ? "✓" : "○"}
+                          </span>
                         </button>
                       </div>
                     </section>

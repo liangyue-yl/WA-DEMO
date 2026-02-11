@@ -899,25 +899,82 @@ body {
   color: #64748b;
 }
 
-.paymentMethodGrid {
+.paymentCardList {
   display: grid;
   gap: 10px;
-  width: min(320px, 100%);
+  width: min(360px, 100%);
 }
 
-.paymentMethodButton {
-  border: 1px solid #bbf7d0;
-  border-radius: 12px;
-  padding: 12px;
-  font-size: 15px;
-  font-weight: 700;
-  color: #166534;
-  background: #f0fdf4;
+.paymentOptionCard {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
   cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
 }
 
-.paymentMethodButton:hover {
-  background: #dcfce7;
+.paymentOptionCard:hover {
+  background: #f8fafc;
+  border-color: #86efac;
+}
+
+.selectedPaymentOption {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15);
+  background: #f0fdf4;
+}
+
+.paymentOptionIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.whatsappPayIcon {
+  background: linear-gradient(180deg, #25d366, #16a34a);
+}
+
+.gpayIcon {
+  background: linear-gradient(180deg, #3b82f6, #2563eb);
+}
+
+.paymentOptionText {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.paymentOptionTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.paymentOptionSubtitle {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.paymentOptionCheck {
+  margin-left: auto;
+  font-size: 15px;
+  color: #16a34a;
+  font-weight: 700;
 }
 
 .flowLoadingSpinner {

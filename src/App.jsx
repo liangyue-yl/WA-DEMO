@@ -70,8 +70,9 @@ function App() {
   const [messages, setMessages] = useState(() => [createAssistantButtonMessage()]);
   const [mode, setMode] = useState("idle");
   const [draft, setDraft] = useState("");
-  const [awaitingOccupation, setAwaitingOccupation] = useState(false);
+  const [leadStage, setLeadStage] = useState("idle");
   const [capturedOccupation, setCapturedOccupation] = useState("");
+  const [capturedName, setCapturedName] = useState("");
   const [quoteForm, setQuoteForm] = useState({ ...quoteFormDefaults });
   const [quotePreview, setQuotePreview] = useState(null);
   const [applicationForm, setApplicationForm] = useState(() =>
@@ -180,7 +181,7 @@ function App() {
   };
 
   const runLeadQualificationScript = () => {
-    setAwaitingOccupation(true);
+    setLeadStage("awaitingOccupation");
 
     appendCustomerMessage({
       sender: "system",
@@ -197,8 +198,9 @@ function App() {
     );
   };
 
-  const showLeadTransfer = (occupation) => {
+  const showLeadTransfer = (occupation, customerName) => {
     const normalizedOccupation = occupation.trim();
+    const normalizedName = customerName.trim();
 
     queueTimer(() => {
       appendCustomerMessage({
@@ -212,7 +214,7 @@ function App() {
       appendCustomerMessage({
         sender: "agent",
         kind: "text",
-        text: `I am your advisor. This is a Personal Accident plan tailored for your occupation (${normalizedOccupation}). Please review it.`,
+        text: `I am your advisor. ${normalizedName}, this is a Personal Accident plan tailored for your occupation (${normalizedOccupation}). Please review it.`,
       });
     }, 1000);
 
@@ -229,12 +231,15 @@ function App() {
 
   const handleSelectUnstructured = () => {
     setMode("unstructured");
+    setLeadStage("idle");
     setCapturedOccupation("");
+    setCapturedName("");
     runLeadQualificationScript();
   };
 
   const handleSelectStructured = () => {
     setMode("structured");
+    setLeadStage("idle");
     appendCustomerMessage({
       sender: "ai",
       kind: "quoteCard",
@@ -257,15 +262,28 @@ function App() {
     });
     setDraft("");
 
-    if (awaitingOccupation) {
-      setAwaitingOccupation(false);
+    if (leadStage === "awaitingOccupation") {
       setCapturedOccupation(cleanedText);
+      setLeadStage("awaitingName");
+      queueAiMessage(
+        {
+          kind: "text",
+          text: "Thanks. May I also know your full name?",
+        },
+        700,
+      );
+      return;
+    }
+
+    if (leadStage === "awaitingName") {
+      setCapturedName(cleanedText);
+      setLeadStage("completed");
       appendAgentMessage({
         sender: "system",
         kind: "system",
         text: "You have a new Lead",
       });
-      showLeadTransfer(cleanedText);
+      showLeadTransfer(capturedOccupation, cleanedText);
       return;
     }
 
@@ -423,48 +441,18 @@ function App() {
 
   const handleAgentShareQuote = () => {
     setShowManageMenu(false);
+    const customerDisplayName = capturedName || "John Doe";
     appendAgentMessage({
       sender: "system",
       kind: "system",
-      text: "Personal Accident quote shared to John Doe.",
+      text: `Personal Accident quote shared to ${customerDisplayName}.`,
     });
     appendCustomerMessage({
       sender: "agent",
       kind: "sharedQuoteCard",
       title: "Personal Accident Quote Card",
-      description: "Recommended annual plan for John Doe",
-      buttonLabel: "Pay Now",
-      paid: false,
-    });
-  };
-
-  const handleCustomerPayNow = (messageId) => {
-    let paidNow = false;
-
-    setMessages((previous) =>
-      previous.map((item) => {
-        if (item.id !== messageId || item.kind !== "sharedQuoteCard" || item.paid) {
-          return item;
-        }
-        paidNow = true;
-        return { ...item, paid: true };
-      }),
-    );
-
-    if (!paidNow) {
-      return;
-    }
-
-    appendCustomerMessage({
-      sender: "system",
-      kind: "system",
-      text: "Payment Successful",
-    });
-
-    appendAgentMessage({
-      sender: "system",
-      kind: "system",
-      text: "John Doe has paid the premium, your commission has been received.",
+      description: `Recommended annual plan for ${customerDisplayName}`,
+      buttonLabel: "View Quote",
     });
   };
 
@@ -521,12 +509,8 @@ function App() {
             <h3>{message.title}</h3>
           </div>
           <p>{message.description}</p>
-          <button
-            type="button"
-            disabled={message.paid}
-            onClick={() => handleCustomerPayNow(message.id)}
-          >
-            {message.paid ? "Paid" : message.buttonLabel}
+          <button type="button" onClick={openFlow}>
+            {message.buttonLabel}
           </button>
         </article>
       );

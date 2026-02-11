@@ -94,6 +94,7 @@ function App() {
   ]);
   const [agentDraft, setAgentDraft] = useState("");
   const [showManageMenu, setShowManageMenu] = useState(false);
+  const [latestLead, setLatestLead] = useState(null);
 
   const customerViewportRef = useRef(null);
   const agentViewportRef = useRef(null);
@@ -206,7 +207,7 @@ function App() {
       appendCustomerMessage({
         sender: "system",
         kind: "system",
-        text: "[System captured a high-intent lead and transferred to Agent]",
+        text: "You've been transferred to our Professional Agent",
       });
     }, 420);
 
@@ -234,12 +235,14 @@ function App() {
     setLeadStage("idle");
     setCapturedOccupation("");
     setCapturedName("");
+    setLatestLead(null);
     runLeadQualificationScript();
   };
 
   const handleSelectStructured = () => {
     setMode("structured");
     setLeadStage("idle");
+    setLatestLead(null);
     appendCustomerMessage({
       sender: "ai",
       kind: "quoteCard",
@@ -278,12 +281,20 @@ function App() {
     if (leadStage === "awaitingName") {
       setCapturedName(cleanedText);
       setLeadStage("completed");
+      const leadProfile = {
+        name: cleanedText,
+        occupation: capturedOccupation || "Unknown",
+        age: "30",
+        product: "Personal Accident",
+      };
+      setLatestLead(leadProfile);
       appendAgentMessage({
-        sender: "system",
-        kind: "system",
+        sender: "ai",
+        kind: "leadNotice",
         text: "You have a new Lead",
+        viewed: false,
+        lead: leadProfile,
       });
-      showLeadTransfer(capturedOccupation, cleanedText);
       return;
     }
 
@@ -422,12 +433,17 @@ function App() {
     setShowManageMenu(false);
 
     if (action === "View Lead") {
-      appendAgentMessage({
-        sender: "ai",
-        kind: "leadSummary",
+      const lead = latestLead || {
+        name: "John Doe",
         occupation: "Riders",
         age: "30",
         product: "Personal Accident",
+      };
+      appendAgentMessage({
+        sender: "ai",
+        kind: "leadSummary",
+        lead,
+        contacted: false,
       });
       return;
     }
@@ -439,21 +455,45 @@ function App() {
     });
   };
 
-  const handleAgentShareQuote = () => {
-    setShowManageMenu(false);
-    const customerDisplayName = capturedName || "John Doe";
+  const handleAgentViewLeadFromNotice = (messageId, lead) => {
+    const fallbackLead = latestLead || {
+      name: capturedName || "John Doe",
+      occupation: capturedOccupation || "Riders",
+      age: "30",
+      product: "Personal Accident",
+    };
+    const targetLead = lead || fallbackLead;
+
+    setAgentMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId ? { ...message, viewed: true } : message,
+      ),
+    );
+
     appendAgentMessage({
-      sender: "system",
-      kind: "system",
-      text: `Personal Accident quote shared to ${customerDisplayName}.`,
+      sender: "ai",
+      kind: "leadSummary",
+      lead: targetLead,
+      contacted: false,
     });
-    appendCustomerMessage({
-      sender: "agent",
-      kind: "sharedQuoteCard",
-      title: "Personal Accident Quote Card",
-      description: `Recommended annual plan for ${customerDisplayName}`,
-      buttonLabel: "View Quote",
-    });
+  };
+
+  const handleAgentContactLead = (messageId, lead) => {
+    const fallbackLead = latestLead || {
+      name: capturedName || "John Doe",
+      occupation: capturedOccupation || "Riders",
+      age: "30",
+      product: "Personal Accident",
+    };
+    const targetLead = lead || fallbackLead;
+
+    setAgentMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId ? { ...message, contacted: true } : message,
+      ),
+    );
+
+    showLeadTransfer(targetLead.occupation, targetLead.name);
   };
 
   const renderCustomerMessage = (message) => {
@@ -533,22 +573,49 @@ function App() {
       );
     }
 
+    if (message.kind === "leadNotice") {
+      return (
+        <div className="agentMessageRow agentOtherRow">
+          <article className="agentBubble agentOtherBubble leadNoticeCard">
+            <p className="leadNoticeTitle">{message.text}</p>
+            <button
+              type="button"
+              className="agentInlineViewLeadBtn"
+              onClick={() => handleAgentViewLeadFromNotice(message.id, message.lead)}
+              disabled={message.viewed}
+            >
+              {message.viewed ? "Viewed" : "View Lead"}
+            </button>
+          </article>
+        </div>
+      );
+    }
+
     if (message.kind === "leadSummary") {
+      const lead = message.lead || {
+        name: "John Doe",
+        occupation: "Riders",
+        age: "30",
+        product: "Personal Accident",
+      };
+
       return (
         <div className="agentMessageRow agentOtherRow">
           <article className="agentBubble agentOtherBubble leadSummaryCard">
             <p className="leadSummaryTitle">AI Lead Summary</p>
             <ul className="leadSummaryList">
-              <li>Occupation: {message.occupation}</li>
-              <li>Age: {message.age}</li>
-              <li>Product: {message.product}</li>
+              <li>Name: {lead.name}</li>
+              <li>Occupation: {lead.occupation}</li>
+              <li>Age: {lead.age}</li>
+              <li>Product: {lead.product}</li>
             </ul>
             <button
               type="button"
-              className="agentInlineShareBtn"
-              onClick={handleAgentShareQuote}
+              className="agentInlineContactBtn"
+              onClick={() => handleAgentContactLead(message.id, lead)}
+              disabled={message.contacted}
             >
-              Share Quote
+              {message.contacted ? "Contacted" : "Contact"}
             </button>
           </article>
         </div>

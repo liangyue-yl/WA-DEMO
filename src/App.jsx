@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 let messageId = 0;
 
-const flowDefaults = {
+const quoteFormDefaults = {
   age: "",
-  carModel: "Sedan",
-  coverage: "USD 100,000",
+  coverage: "500k",
 };
 
 const formatChatTime = () =>
@@ -26,42 +25,24 @@ const createAssistantButtonMessage = () =>
     sender: "ai",
     kind: "ctaButtons",
     agentName: "Ignite Agent",
-    title: "Choose your service assistant",
-    text: "Select one quick action below to continue.",
+    title: "Personal Accident service entry",
+    text: "Choose one native quick action below.",
     cta1Label: "AI sales assistant",
     cta2Label: "Business Processing Assistant",
   });
 
 const getAdvisoryReply = (question) => {
   const lowerQuestion = question.toLowerCase();
-  const asksComparison =
-    lowerQuestion.includes("compare") ||
-    (lowerQuestion.includes("plan a") && lowerQuestion.includes("plan b"));
 
-  if (asksComparison) {
-    return `Great question. Here is a practical comparison:
-
-Plan A
-- Lower premium and easier entry.
-- Covers standard collision and third-party liability.
-- Best for cost-sensitive customers with moderate annual mileage.
-
-Plan B
-- Higher premium but broader protection.
-- Adds roadside assistance, replacement car, and zero-depreciation options.
-- Better for newer vehicles or drivers seeking stronger claim certainty.
-
-Sales recommendation:
-If your top priority is monthly affordability, start with Plan A.
-If you want better claim outcomes and less out-of-pocket risk, Plan B is usually the stronger value over 12 months.`;
+  if (lowerQuestion.includes("premium") || lowerQuestion.includes("price")) {
+    return "For delivery riders, Personal Accident plans usually balance affordability and medical reimbursement. A common benchmark is around CNY 199 per year for core coverage.";
   }
 
-  return `Thanks for the detailed question. A safe way to evaluate policy wording is:
-1) confirm exclusions and waiting periods,
-2) compare deductible impact per claim,
-3) model premium vs. expected annual usage.
+  if (lowerQuestion.includes("coverage") || lowerQuestion.includes("benefit")) {
+    return "The recommended baseline includes death/disability benefit and accidental medical reimbursement. For higher-risk occupations, increasing death/disability coverage to 1,000,000 CNY is often safer.";
+  }
 
-If you share your car type and budget range, I can give a targeted recommendation with trade-offs.`;
+  return "For Personal Accident insurance, focus on occupation class, accidental medical limits, and disability payout ratio. If you share your riding distance and working hours, I can suggest a more precise plan.";
 };
 
 function Icon({ children, viewBox = "0 0 24 24" }) {
@@ -81,7 +62,9 @@ function App() {
   const [messages, setMessages] = useState(() => [createAssistantButtonMessage()]);
   const [mode, setMode] = useState("idle");
   const [draft, setDraft] = useState("");
-  const [flowData, setFlowData] = useState({ ...flowDefaults });
+  const [quoteForm, setQuoteForm] = useState({ ...quoteFormDefaults });
+  const [quotePreview, setQuotePreview] = useState(null);
+  const [flowStep, setFlowStep] = useState("form");
   const [flowMounted, setFlowMounted] = useState(false);
   const [flowVisible, setFlowVisible] = useState(false);
   const [typingCount, setTypingCount] = useState(0);
@@ -103,7 +86,7 @@ function App() {
         : "AI consultation mode is active.";
     }
     if (mode === "structured") {
-      return "Structured mode active. Tap quote card to continue.";
+      return "Structured mode active. Tap View Quote to continue.";
     }
     return "Tap Menu to open quick actions.";
   }, [isTyping, mode]);
@@ -157,16 +140,59 @@ function App() {
     }, delay);
   };
 
-  const handleSelectUnstructured = () => {
-    setMode("unstructured");
-    appendMessage(
+  const runLeadQualificationScript = () => {
+    appendMessage({
+      sender: "system",
+      kind: "system",
+      text: "Switched to AI consultation mode.",
+    });
+
+    queueAiMessage(
       {
+        kind: "text",
+        text: "To tailor a Personal Accident plan, what is your occupation?",
+      },
+      650,
+    );
+
+    queueTimer(() => {
+      appendMessage({
+        sender: "user",
+        kind: "text",
+        text: "外卖员",
+      });
+    }, 1700);
+
+    queueTimer(() => {
+      appendMessage({
         sender: "system",
         kind: "system",
-        text: "已切换至 AI 咨询模式",
-      },
-      { animate: true },
-    );
+        text: "[System captured a high-intent lead and transferred to Agent]",
+      });
+    }, 2600);
+
+    queueTimer(() => {
+      appendMessage({
+        sender: "agent",
+        kind: "text",
+        text: "I am your advisor. Here is a personal accident plan tailored for delivery riders. Please review it.",
+      });
+    }, 3400);
+
+    queueTimer(() => {
+      appendMessage({
+        sender: "agent",
+        kind: "quoteCard",
+        title: "Personal Accident Quote",
+        description: "High-mobility rider package",
+        buttonLabel: "View Quote",
+      });
+    }, 3900);
+  };
+
+  const handleSelectUnstructured = () => {
+    setMode("unstructured");
+    runLeadQualificationScript();
   };
 
   const handleSelectStructured = () => {
@@ -174,9 +200,9 @@ function App() {
     appendMessage({
       sender: "ai",
       kind: "quoteCard",
-      title: "业务办理助手 (Structured)",
-      description: "保单查询、报价、理赔",
-      buttonLabel: "立即报价",
+      title: "Personal Accident Quote Sheet",
+      description: "Policy search, quote, and claims",
+      buttonLabel: "View Quote",
     });
   };
 
@@ -202,15 +228,18 @@ function App() {
     );
   };
 
-  const handleFlowChange = (event) => {
+  const handleQuoteFormChange = (event) => {
     const { name, value } = event.target;
-    setFlowData((previous) => ({
+    setQuoteForm((previous) => ({
       ...previous,
       [name]: value,
     }));
   };
 
   const openFlow = () => {
+    setFlowStep("form");
+    setQuoteForm({ ...quoteFormDefaults });
+    setQuotePreview(null);
     setFlowMounted(true);
     queueTimer(() => setFlowVisible(true), 16);
   };
@@ -220,8 +249,8 @@ function App() {
       sender: "ai",
       kind: "ctaButtons",
       agentName: "Ignite Agent",
-      title: "Choose your service assistant",
-      text: "Select one quick action below to continue.",
+      title: "Personal Accident service entry",
+      text: "Choose one native quick action below.",
       cta1Label: "AI sales assistant",
       cta2Label: "Business Processing Assistant",
     });
@@ -229,20 +258,43 @@ function App() {
 
   const closeFlow = () => {
     setFlowVisible(false);
-    queueTimer(() => setFlowMounted(false), 300);
+    queueTimer(() => {
+      setFlowMounted(false);
+      setFlowStep("form");
+      setQuoteForm({ ...quoteFormDefaults });
+      setQuotePreview(null);
+    }, 300);
   };
 
-  const handleFlowSubmit = (event) => {
+  const handleGeneratePreview = (event) => {
     event.preventDefault();
-    closeFlow();
-    queueAiMessage(
-      {
+    if (!quoteForm.age.trim()) {
+      return;
+    }
+
+    setQuotePreview({
+      age: quoteForm.age.trim(),
+      coverage: quoteForm.coverage,
+      price: 199,
+    });
+    setFlowStep("quote");
+  };
+
+  const handleConfirmPayment = () => {
+    setFlowStep("processing");
+
+    queueTimer(() => {
+      setFlowStep("success");
+    }, 1000);
+
+    queueTimer(() => {
+      closeFlow();
+      appendMessage({
+        sender: "ai",
         kind: "text",
-        text: `报价请求已提交：年龄 ${flowData.age}，车型 ${flowData.carModel}，保额 ${flowData.coverage}。顾问会尽快联系你。`,
-      },
-      760,
-    );
-    setFlowData({ ...flowDefaults });
+        text: "Payment Successful. Your Personal Accident e-policy will be shared in this chat shortly.",
+      });
+    }, 2500);
   };
 
   const renderMessage = (message) => {
@@ -290,7 +342,12 @@ function App() {
       );
     }
 
-    return <p>{message.text}</p>;
+    return (
+      <>
+        {message.sender === "agent" ? <span className="agentRoleTag">Human Agent</span> : null}
+        <p>{message.text}</p>
+      </>
+    );
   };
 
   return (
@@ -410,7 +467,11 @@ function App() {
                   >
                     <div
                       className={`bubble ${
-                        message.sender === "user" ? "userBubble" : "aiBubble"
+                        message.sender === "user"
+                          ? "userBubble"
+                          : message.sender === "agent"
+                            ? "agentBubble"
+                            : "aiBubble"
                       }`}
                     >
                       {renderMessage(message)}
@@ -577,63 +638,133 @@ function App() {
                       </Icon>
                     </button>
                     <div>
-                      <h2 className="flowTitle">立即报价</h2>
+                      <h2 className="flowTitle">PA Quote Flow</h2>
                       <p className="flowCaption">WhatsApp Flow</p>
                     </div>
                   </div>
                 </header>
 
-                <form className="flowForm" onSubmit={handleFlowSubmit}>
-                  <section className="flowSection">
-                    <h3 className="flowSectionTitle">Policy details</h3>
+                <div className="flowProgressBar" aria-label="Flow steps">
+                  <span className={`progressStep ${flowStep === "form" ? "activeStep" : ""}`}>
+                    1
+                  </span>
+                  <span
+                    className={`progressStep ${
+                      flowStep === "quote" ? "activeStep" : ""
+                    }`}
+                  >
+                    2
+                  </span>
+                  <span
+                    className={`progressStep ${
+                      flowStep === "processing" || flowStep === "success"
+                        ? "activeStep"
+                        : ""
+                    }`}
+                  >
+                    3
+                  </span>
+                </div>
 
-                    <label>
-                      Age
-                      <input
-                        required
-                        min="18"
-                        max="99"
-                        name="age"
-                        type="number"
-                        placeholder="e.g. 32"
-                        value={flowData.age}
-                        onChange={handleFlowChange}
-                      />
-                    </label>
+                {flowStep === "form" ? (
+                  <form className="flowForm" onSubmit={handleGeneratePreview}>
+                    <section className="flowSection">
+                      <h3 className="flowSectionTitle">Step 1 · Information Collection</h3>
 
-                    <label>
-                      Vehicle type
-                      <select
-                        name="carModel"
-                        value={flowData.carModel}
-                        onChange={handleFlowChange}
-                      >
-                        <option>Sedan</option>
-                        <option>SUV</option>
-                        <option>Electric Vehicle</option>
-                        <option>Pickup Truck</option>
-                      </select>
-                    </label>
+                      <label>
+                        Age
+                        <input
+                          required
+                          min="18"
+                          max="70"
+                          name="age"
+                          type="number"
+                          placeholder="e.g. 32"
+                          value={quoteForm.age}
+                          onChange={handleQuoteFormChange}
+                        />
+                      </label>
 
-                    <label>
-                      Coverage amount
-                      <select
-                        name="coverage"
-                        value={flowData.coverage}
-                        onChange={handleFlowChange}
-                      >
-                        <option>USD 50,000</option>
-                        <option>USD 100,000</option>
-                        <option>USD 200,000</option>
-                        <option>USD 500,000</option>
-                      </select>
-                    </label>
+                      <fieldset className="coverageFieldset">
+                        <legend>Coverage amount</legend>
+                        <label className="coverageOption">
+                          <input
+                            type="radio"
+                            name="coverage"
+                            value="500k"
+                            checked={quoteForm.coverage === "500k"}
+                            onChange={handleQuoteFormChange}
+                          />
+                          <span>CNY 500,000</span>
+                        </label>
+                        <label className="coverageOption">
+                          <input
+                            type="radio"
+                            name="coverage"
+                            value="1m"
+                            checked={quoteForm.coverage === "1m"}
+                            onChange={handleQuoteFormChange}
+                          />
+                          <span>CNY 1,000,000</span>
+                        </label>
+                      </fieldset>
+                    </section>
+
+                    <button type="submit" className="flowSubmit">
+                      View Plan
+                    </button>
+                  </form>
+                ) : null}
+
+                {flowStep === "quote" && quotePreview ? (
+                  <section className="flowPreviewPane">
+                    <h3 className="flowSectionTitle">Step 2 · Quote Sheet</h3>
+                    <table className="quoteTable">
+                      <tbody>
+                        <tr>
+                          <th>Death / Disability Benefit</th>
+                          <td>
+                            {quotePreview.coverage === "1m"
+                              ? "CNY 1,000,000"
+                              : "CNY 500,000"}
+                          </td>
+                        </tr>
+                        <tr>
+                          <th>Accidental Medical</th>
+                          <td>CNY 50,000</td>
+                        </tr>
+                        <tr>
+                          <th>Price</th>
+                          <td className="quotePriceCell">CNY 199 / year</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p className="quotePreviewMeta">Age {quotePreview.age}</p>
+                    <button
+                      type="button"
+                      className="flowSubmit"
+                      onClick={handleConfirmPayment}
+                    >
+                      Pay Now
+                    </button>
                   </section>
+                ) : null}
 
-                  <button type="submit" className="flowSubmit">
-                    Submit Quote Request
-                  </button>
-                </form>
+                {flowStep === "processing" ? (
+                  <section className="flowStatusPane">
+                    <span className="flowLoadingSpinner" aria-hidden="true" />
+                    <p>Processing payment...</p>
+                  </section>
+                ) : null}
+
+                {flowStep === "success" ? (
+                  <section className="flowStatusPane">
+                    <span className="flowSuccessIcon" aria-hidden="true">
+                      ✓
+                    </span>
+                    <p className="successLabel">Payment Successful</p>
+                  </section>
+                ) : null}
               </div>
             </section>
           ) : null}

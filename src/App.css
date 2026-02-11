@@ -659,6 +659,41 @@ body {
   color: #f8fafc;
 }
 
+.leadSummaryCard {
+  display: grid;
+  gap: 9px;
+}
+
+.leadSummaryTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #a7f3d0;
+}
+
+.leadSummaryList {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.agentInlineShareBtn {
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 12px;
+  width: fit-content;
+  font-size: 12px;
+  font-weight: 700;
+  color: #166534;
+  background: #dcfce7;
+  cursor: pointer;
+}
+
+.agentInlineShareBtn:hover {
+  background: #bbf7d0;
+}
+
 .agentMetaTime {
   margin-top: 4px;
   display: block;
@@ -705,7 +740,6 @@ body {
 }
 
 .agentManageTrigger,
-.agentShareBtn,
 .agentSendBtn {
   border: 0;
   border-radius: 999px;
@@ -718,11 +752,6 @@ body {
 .agentManageTrigger {
   background: #fef3c7;
   color: #92400e;
-}
-
-.agentShareBtn {
-  background: #dcfce7;
-  color: #166534;
 }
 
 .agentSendBtn {

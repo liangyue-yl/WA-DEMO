@@ -406,8 +406,10 @@ function App() {
     if (action === "View Lead") {
       appendAgentMessage({
         sender: "ai",
-        kind: "text",
-        text: "AI Lead Summary\n- Occupation: Riders\n- Age: 30\n- Product: Personal Accident",
+        kind: "leadSummary",
+        occupation: "Riders",
+        age: "30",
+        product: "Personal Accident",
       });
       return;
     }
@@ -543,6 +545,28 @@ function App() {
       return (
         <div className="agentMessageRow centerRow">
           <span className="agentSystemNotice">{message.text}</span>
+        </div>
+      );
+    }
+
+    if (message.kind === "leadSummary") {
+      return (
+        <div className="agentMessageRow agentOtherRow">
+          <article className="agentBubble agentOtherBubble leadSummaryCard">
+            <p className="leadSummaryTitle">AI Lead Summary</p>
+            <ul className="leadSummaryList">
+              <li>Occupation: {message.occupation}</li>
+              <li>Age: {message.age}</li>
+              <li>Product: {message.product}</li>
+            </ul>
+            <button
+              type="button"
+              className="agentInlineShareBtn"
+              onClick={handleAgentShareQuote}
+            >
+              Share Quote
+            </button>
+          </article>
         </div>
       );
     }
@@ -1037,9 +1061,6 @@ function App() {
                 onClick={() => setShowManageMenu((open) => !open)}
               >
                 ⚡ Manage
-              </button>
-              <button type="button" className="agentShareBtn" onClick={handleAgentShareQuote}>
-                Share Quote
               </button>
               <button type="button" className="agentSendBtn" onClick={handleAgentSendMessage}>
                 Send

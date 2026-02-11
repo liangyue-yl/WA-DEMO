@@ -31,6 +31,17 @@ const createAssistantButtonMessage = () =>
     cta2Label: "Business Processing Assistant",
   });
 
+const createApplicationDefaults = (occupation = "") => ({
+  insuredName: "",
+  idPhotoName: "",
+  dateOfBirth: "",
+  occupation,
+  coveragePeriod: "1 year",
+});
+
+const isHighRiskOccupation = (occupationText) =>
+  /外卖|骑手|delivery|courier|rider/i.test(occupationText);
+
 const getAdvisoryReply = (question) => {
   const lowerQuestion = question.toLowerCase();
 
@@ -62,9 +73,16 @@ function App() {
   const [messages, setMessages] = useState(() => [createAssistantButtonMessage()]);
   const [mode, setMode] = useState("idle");
   const [draft, setDraft] = useState("");
+  const [awaitingOccupation, setAwaitingOccupation] = useState(false);
+  const [capturedOccupation, setCapturedOccupation] = useState("");
   const [quoteForm, setQuoteForm] = useState({ ...quoteFormDefaults });
   const [quotePreview, setQuotePreview] = useState(null);
-  const [flowStep, setFlowStep] = useState("form");
+  const [applicationForm, setApplicationForm] = useState(() =>
+    createApplicationDefaults(""),
+  );
+  const [flowStep, setFlowStep] = useState("collect");
+  const [paymentState, setPaymentState] = useState("choose");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
   const [flowMounted, setFlowMounted] = useState(false);
   const [flowVisible, setFlowVisible] = useState(false);
   const [typingCount, setTypingCount] = useState(0);
@@ -141,6 +159,8 @@ function App() {
   };
 
   const runLeadQualificationScript = () => {
+    setAwaitingOccupation(true);
+
     appendMessage({
       sender: "system",
       kind: "system",
@@ -154,44 +174,39 @@ function App() {
       },
       650,
     );
+  };
 
-    queueTimer(() => {
-      appendMessage({
-        sender: "user",
-        kind: "text",
-        text: "外卖员",
-      });
-    }, 1700);
-
+  const showHighRiskLeadTransfer = (occupation) => {
     queueTimer(() => {
       appendMessage({
         sender: "system",
         kind: "system",
         text: "[System captured a high-intent lead and transferred to Agent]",
       });
-    }, 2600);
+    }, 420);
 
     queueTimer(() => {
       appendMessage({
         sender: "agent",
         kind: "text",
-        text: "I am your advisor. Here is a personal accident plan tailored for delivery riders. Please review it.",
+        text: "I am your advisor. This is a Personal Accident plan tailored for delivery riders. Please review it.",
       });
-    }, 3400);
+    }, 1000);
 
     queueTimer(() => {
       appendMessage({
         sender: "agent",
         kind: "quoteCard",
         title: "Personal Accident Quote",
-        description: "High-mobility rider package",
+        description: `${occupation} protection package`,
         buttonLabel: "View Quote",
       });
-    }, 3900);
+    }, 1450);
   };
 
   const handleSelectUnstructured = () => {
     setMode("unstructured");
+    setCapturedOccupation("");
     runLeadQualificationScript();
   };
 
@@ -219,6 +234,24 @@ function App() {
     });
     setDraft("");
 
+    if (awaitingOccupation) {
+      setAwaitingOccupation(false);
+      setCapturedOccupation(cleanedText);
+
+      if (isHighRiskOccupation(cleanedText)) {
+        showHighRiskLeadTransfer(cleanedText);
+      } else {
+        queueAiMessage(
+          {
+            kind: "text",
+            text: `Thanks. We have recorded occupation as ${cleanedText}. You can ask me about PA coverage and pricing now.`,
+          },
+          850,
+        );
+      }
+      return;
+    }
+
     queueAiMessage(
       {
         kind: "text",
@@ -237,9 +270,12 @@ function App() {
   };
 
   const openFlow = () => {
-    setFlowStep("form");
+    setFlowStep("collect");
     setQuoteForm({ ...quoteFormDefaults });
     setQuotePreview(null);
+    setApplicationForm(createApplicationDefaults(capturedOccupation));
+    setPaymentState("choose");
+    setSelectedPaymentMethod("");
     setFlowMounted(true);
     queueTimer(() => setFlowVisible(true), 16);
   };
@@ -260,9 +296,12 @@ function App() {
     setFlowVisible(false);
     queueTimer(() => {
       setFlowMounted(false);
-      setFlowStep("form");
+      setFlowStep("collect");
       setQuoteForm({ ...quoteFormDefaults });
       setQuotePreview(null);
+      setApplicationForm(createApplicationDefaults(capturedOccupation));
+      setPaymentState("choose");
+      setSelectedPaymentMethod("");
     }, 300);
   };
 
@@ -280,11 +319,37 @@ function App() {
     setFlowStep("quote");
   };
 
-  const handleConfirmPayment = () => {
-    setFlowStep("processing");
+  const handleContinueToApplication = () => {
+    setApplicationForm((previous) => ({
+      ...previous,
+      occupation: capturedOccupation || previous.occupation,
+    }));
+    setFlowStep("application");
+  };
+
+  const handleApplicationChange = (event) => {
+    const { name, value, type, files } = event.target;
+    setApplicationForm((previous) => ({
+      ...previous,
+      [name]: type === "file" ? (files?.[0]?.name ?? "") : value,
+    }));
+  };
+
+  const handleSubmitApplication = (event) => {
+    event.preventDefault();
+    if (!applicationForm.idPhotoName) {
+      return;
+    }
+    setFlowStep("payment");
+    setPaymentState("choose");
+  };
+
+  const handleSelectPaymentMethod = (method) => {
+    setSelectedPaymentMethod(method);
+    setPaymentState("processing");
 
     queueTimer(() => {
-      setFlowStep("success");
+      setPaymentState("success");
     }, 1000);
 
     queueTimer(() => {
@@ -292,7 +357,7 @@ function App() {
       appendMessage({
         sender: "ai",
         kind: "text",
-        text: "Payment Successful. Your Personal Accident e-policy will be shared in this chat shortly.",
+        text: `Payment Successful via ${method}. Your Personal Accident e-policy will be shared in this chat shortly.`,
       });
     }, 2500);
   };
@@ -645,7 +710,11 @@ function App() {
                 </header>
 
                 <div className="flowProgressBar" aria-label="Flow steps">
-                  <span className={`progressStep ${flowStep === "form" ? "activeStep" : ""}`}>
+                  <span
+                    className={`progressStep ${
+                      flowStep === "collect" ? "activeStep" : ""
+                    }`}
+                  >
                     1
                   </span>
                   <span
@@ -657,16 +726,21 @@ function App() {
                   </span>
                   <span
                     className={`progressStep ${
-                      flowStep === "processing" || flowStep === "success"
-                        ? "activeStep"
-                        : ""
+                      flowStep === "application" ? "activeStep" : ""
                     }`}
                   >
                     3
                   </span>
+                  <span
+                    className={`progressStep ${
+                      flowStep === "payment" ? "activeStep" : ""
+                    }`}
+                  >
+                    4
+                  </span>
                 </div>
 
-                {flowStep === "form" ? (
+                {flowStep === "collect" ? (
                   <form className="flowForm" onSubmit={handleGeneratePreview}>
                     <section className="flowSection">
                       <h3 className="flowSectionTitle">Step 1 · Information Collection</h3>
@@ -723,11 +797,7 @@ function App() {
                       <tbody>
                         <tr>
                           <th>Death / Disability Benefit</th>
-                          <td>
-                            {quotePreview.coverage === "1m"
-                              ? "CNY 1,000,000"
-                              : "CNY 500,000"}
-                          </td>
+                          <td>CNY 500,000</td>
                         </tr>
                         <tr>
                           <th>Accidental Medical</th>
@@ -739,25 +809,124 @@ function App() {
                         </tr>
                       </tbody>
                     </table>
-                    <p className="quotePreviewMeta">Age {quotePreview.age}</p>
+                    <p className="quotePreviewMeta">
+                      Age {quotePreview.age} · Selected coverage {quotePreview.coverage === "1m" ? "CNY 1,000,000" : "CNY 500,000"}
+                    </p>
                     <button
                       type="button"
                       className="flowSubmit"
-                      onClick={handleConfirmPayment}
+                      onClick={handleContinueToApplication}
                     >
-                      Pay Now
+                      Buy Now
                     </button>
                   </section>
                 ) : null}
 
-                {flowStep === "processing" ? (
+                {flowStep === "application" ? (
+                  <form className="flowForm" onSubmit={handleSubmitApplication}>
+                    <section className="flowSection">
+                      <h3 className="flowSectionTitle">Step 3 · Application Form</h3>
+
+                      <label>
+                        Insured name
+                        <input
+                          required
+                          name="insuredName"
+                          type="text"
+                          placeholder="e.g. Alex Lin"
+                          value={applicationForm.insuredName}
+                          onChange={handleApplicationChange}
+                        />
+                      </label>
+
+                      <label>
+                        Insured photo of ID
+                        <input
+                          required
+                          name="idPhotoName"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleApplicationChange}
+                        />
+                        {applicationForm.idPhotoName ? (
+                          <span className="fileNameHint">{applicationForm.idPhotoName}</span>
+                        ) : null}
+                      </label>
+
+                      <label>
+                        Date of birth
+                        <input
+                          required
+                          name="dateOfBirth"
+                          type="date"
+                          value={applicationForm.dateOfBirth}
+                          onChange={handleApplicationChange}
+                        />
+                      </label>
+
+                      <label>
+                        Occupation
+                        <input
+                          required
+                          name="occupation"
+                          type="text"
+                          value={applicationForm.occupation}
+                          onChange={handleApplicationChange}
+                        />
+                      </label>
+
+                      <label>
+                        Coverage period
+                        <select
+                          name="coveragePeriod"
+                          value={applicationForm.coveragePeriod}
+                          onChange={handleApplicationChange}
+                        >
+                          <option>1 year</option>
+                          <option>6 months</option>
+                          <option>3 months</option>
+                        </select>
+                      </label>
+                    </section>
+
+                    <button type="submit" className="flowSubmit">
+                      Pay Now
+                    </button>
+                  </form>
+                ) : null}
+
+                {flowStep === "payment" ? (
+                  paymentState === "choose" ? (
+                    <section className="flowStatusPane">
+                      <h3 className="flowSectionTitle">Step 4 · Select payment method</h3>
+                      <div className="paymentMethodGrid">
+                        <button
+                          type="button"
+                          className="paymentMethodButton"
+                          onClick={() => handleSelectPaymentMethod("WhatsApp")}
+                        >
+                          WhatsApp
+                        </button>
+                        <button
+                          type="button"
+                          className="paymentMethodButton"
+                          onClick={() => handleSelectPaymentMethod("GPay")}
+                        >
+                          GPay
+                        </button>
+                      </div>
+                    </section>
+                  ) : null
+                ) : null}
+
+                {flowStep === "payment" && paymentState === "processing" ? (
                   <section className="flowStatusPane">
                     <span className="flowLoadingSpinner" aria-hidden="true" />
-                    <p>Processing payment...</p>
+                    <p>Processing payment with {selectedPaymentMethod}...</p>
                   </section>
                 ) : null}
 
-                {flowStep === "success" ? (
+                {flowStep === "payment" && paymentState === "success" ? (
                   <section className="flowStatusPane">
                     <span className="flowSuccessIcon" aria-hidden="true">
                       ✓

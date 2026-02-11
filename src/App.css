@@ -890,6 +890,36 @@ body {
   color: #334155;
 }
 
+.flowStatusPane .flowSectionTitle {
+  margin: 0 0 6px;
+}
+
+.fileNameHint {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.paymentMethodGrid {
+  display: grid;
+  gap: 10px;
+  width: min(320px, 100%);
+}
+
+.paymentMethodButton {
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #166534;
+  background: #f0fdf4;
+  cursor: pointer;
+}
+
+.paymentMethodButton:hover {
+  background: #dcfce7;
+}
+
 .flowLoadingSpinner {
   width: 46px;
   height: 46px;

@@ -1043,7 +1043,6 @@ function App() {
             <ul className="leadSummaryList">
               <li>Name: {lead.name}</li>
               <li>Occupation: {lead.occupation}</li>
-              <li>Age: {lead.age}</li>
               <li>Product: {lead.product}</li>
             </ul>
             <div className="agentTemplateButtonRow">

@@ -95,6 +95,7 @@ function App() {
   const [agentDraft, setAgentDraft] = useState("");
   const [showManageMenu, setShowManageMenu] = useState(false);
   const [latestLead, setLatestLead] = useState(null);
+  const [flowLastActor, setFlowLastActor] = useState("customer");
 
   const customerViewportRef = useRef(null);
   const agentViewportRef = useRef(null);
@@ -179,6 +180,44 @@ function App() {
         ...payload,
       });
     }, delay);
+  };
+
+  const startFlowSync = (initiator = "customer") => {
+    const flowSyncMessage = createMessage({
+      sender: "ai",
+      kind: "flowSync",
+      closed: false,
+      finalStatus: "",
+    });
+
+    setAgentMessages((previous) => [
+      ...previous.map((message) =>
+        message.kind === "flowSync" && !message.closed
+          ? { ...message, closed: true, finalStatus: "closed" }
+          : message,
+      ),
+      { ...flowSyncMessage, entering: true },
+    ]);
+
+    queueTimer(() => {
+      setAgentMessages((previous) =>
+        previous.map((message) =>
+          message.id === flowSyncMessage.id ? { ...message, entering: false } : message,
+        ),
+      );
+    }, 230);
+
+    setFlowLastActor(initiator);
+  };
+
+  const closeActiveFlowSync = (finalStatus = "closed") => {
+    setAgentMessages((previous) =>
+      previous.map((message) =>
+        message.kind === "flowSync" && !message.closed
+          ? { ...message, closed: true, finalStatus }
+          : message,
+      ),
+    );
   };
 
   const runLeadQualificationScript = () => {
@@ -307,21 +346,31 @@ function App() {
     );
   };
 
-  const handleQuoteFormChange = (event) => {
-    const { name, value } = event.target;
+  const applyQuoteField = (name, value, actor = "customer") => {
+    setFlowLastActor(actor);
     setQuoteForm((previous) => ({
       ...previous,
-      [name]: value,
+      [name]: `${value}`,
     }));
   };
 
-  const openFlow = () => {
+  const handleQuoteFormChange = (event) => {
+    const { name, value } = event.target;
+    applyQuoteField(name, value, "customer");
+  };
+
+  const handleAgentQuoteFieldChange = (name, value) => {
+    applyQuoteField(name, value, "agent");
+  };
+
+  const openFlow = (initiator = "customer") => {
     setFlowStep("collect");
     setQuoteForm({ ...quoteFormDefaults });
     setQuotePreview(null);
     setApplicationForm(createApplicationDefaults(capturedOccupation));
     setPaymentState("choose");
     setSelectedPaymentMethod("");
+    startFlowSync(initiator);
     setFlowMounted(true);
     queueTimer(() => setFlowVisible(true), 16);
   };
@@ -338,8 +387,9 @@ function App() {
     });
   };
 
-  const closeFlow = () => {
+  const closeFlow = (finalStatus = "closed") => {
     setFlowVisible(false);
+    closeActiveFlowSync(finalStatus);
     queueTimer(() => {
       setFlowMounted(false);
       setFlowStep("collect");
@@ -351,21 +401,32 @@ function App() {
     }, 300);
   };
 
-  const handleGeneratePreview = (event) => {
-    event.preventDefault();
+  const generateQuotePreview = (actor = "customer") => {
     if (!quoteForm.age.trim()) {
-      return;
+      return false;
     }
 
+    setFlowLastActor(actor);
     setQuotePreview({
       age: quoteForm.age.trim(),
       coverage: quoteForm.coverage,
       price: 199,
     });
     setFlowStep("quote");
+    return true;
   };
 
-  const handleContinueToApplication = () => {
+  const handleGeneratePreview = (event) => {
+    event.preventDefault();
+    generateQuotePreview("customer");
+  };
+
+  const handleAgentGeneratePreview = () => {
+    generateQuotePreview("agent");
+  };
+
+  const continueToApplication = (actor = "customer") => {
+    setFlowLastActor(actor);
     setApplicationForm((previous) => ({
       ...previous,
       occupation: capturedOccupation || previous.occupation,
@@ -373,24 +434,53 @@ function App() {
     setFlowStep("application");
   };
 
-  const handleApplicationChange = (event) => {
-    const { name, value, type, files } = event.target;
+  const handleContinueToApplication = () => {
+    continueToApplication("customer");
+  };
+
+  const handleAgentContinueToApplication = () => {
+    continueToApplication("agent");
+  };
+
+  const applyApplicationField = (name, value, actor = "customer") => {
+    setFlowLastActor(actor);
     setApplicationForm((previous) => ({
       ...previous,
-      [name]: type === "file" ? (files?.[0]?.name ?? "") : value,
+      [name]: value,
     }));
+  };
+
+  const handleApplicationChange = (event) => {
+    const { name, value, type, files } = event.target;
+    const normalizedValue = type === "file" ? (files?.[0]?.name ?? "") : value;
+    applyApplicationField(name, normalizedValue, "customer");
+  };
+
+  const handleAgentApplicationFieldChange = (name, value) => {
+    applyApplicationField(name, value, "agent");
+  };
+
+  const submitApplication = (actor = "customer") => {
+    if (!applicationForm.idPhotoName) {
+      return false;
+    }
+    setFlowLastActor(actor);
+    setFlowStep("payment");
+    setPaymentState("choose");
+    return true;
   };
 
   const handleSubmitApplication = (event) => {
     event.preventDefault();
-    if (!applicationForm.idPhotoName) {
-      return;
-    }
-    setFlowStep("payment");
-    setPaymentState("choose");
+    submitApplication("customer");
   };
 
-  const handleSelectPaymentMethod = (method) => {
+  const handleAgentSubmitApplication = () => {
+    submitApplication("agent");
+  };
+
+  const handleSelectPaymentMethod = (method, actor = "customer") => {
+    setFlowLastActor(actor);
     setSelectedPaymentMethod(method);
     queueTimer(() => {
       setPaymentState("processing");
@@ -401,7 +491,7 @@ function App() {
     }, 1220);
 
     queueTimer(() => {
-      closeFlow();
+      closeFlow("completed");
       appendCustomerMessage({
         sender: "ai",
         kind: "text",
@@ -413,6 +503,10 @@ function App() {
         text: "John Doe has paid the premium, your commission has been received.",
       });
     }, 2720);
+  };
+
+  const handleAgentSelectPaymentMethod = (method) => {
+    handleSelectPaymentMethod(method, "agent");
   };
 
   const handleAgentSendMessage = () => {
@@ -496,6 +590,248 @@ function App() {
     showLeadTransfer(targetLead.occupation, targetLead.name);
   };
 
+  const renderAgentFlowSyncControls = () => {
+    if (flowStep === "collect") {
+      return (
+        <div className="agentFlowEditor">
+          <label>
+            Age
+            <input
+              type="number"
+              min="18"
+              max="70"
+              value={quoteForm.age}
+              onChange={(event) => handleAgentQuoteFieldChange("age", event.target.value)}
+              placeholder="Customer age"
+            />
+          </label>
+          <div className="agentCoveragePicker" role="group" aria-label="Coverage amount">
+            <button
+              type="button"
+              className={`agentCoverageChip ${quoteForm.coverage === "500k" ? "selectedChip" : ""}`}
+              onClick={() => handleAgentQuoteFieldChange("coverage", "500k")}
+            >
+              CNY 500k
+            </button>
+            <button
+              type="button"
+              className={`agentCoverageChip ${quoteForm.coverage === "1m" ? "selectedChip" : ""}`}
+              onClick={() => handleAgentQuoteFieldChange("coverage", "1m")}
+            >
+              CNY 1m
+            </button>
+          </div>
+          <div className="agentTemplateButtonRow">
+            <button type="button" className="agentTemplateButton" onClick={handleAgentGeneratePreview}>
+              <span className="agentTemplateButtonIcon" aria-hidden="true">
+                <Icon viewBox="0 0 24 24">
+                  <path
+                    d="M4 7.5H20M4 12H20M4 16.5H14"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Icon>
+              </span>
+              <span>Generate Quote Preview</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (flowStep === "quote" && quotePreview) {
+      return (
+        <div className="agentFlowEditor">
+          <dl className="agentFlowSummary">
+            <div>
+              <dt>Age</dt>
+              <dd>{quotePreview.age}</dd>
+            </div>
+            <div>
+              <dt>Coverage</dt>
+              <dd>{quotePreview.coverage === "1m" ? "CNY 1,000,000" : "CNY 500,000"}</dd>
+            </div>
+            <div>
+              <dt>Price</dt>
+              <dd>CNY {quotePreview.price} / year</dd>
+            </div>
+          </dl>
+          <div className="agentTemplateButtonRow">
+            <button
+              type="button"
+              className="agentTemplateButton"
+              onClick={handleAgentContinueToApplication}
+            >
+              <span className="agentTemplateButtonIcon" aria-hidden="true">
+                <Icon viewBox="0 0 24 24">
+                  <path
+                    d="M8 12H16M16 12L12.7 8.7M16 12L12.7 15.3"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Icon>
+              </span>
+              <span>Move to Application</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (flowStep === "application") {
+      return (
+        <div className="agentFlowEditor">
+          <label>
+            Insured name
+            <input
+              type="text"
+              value={applicationForm.insuredName}
+              onChange={(event) =>
+                handleAgentApplicationFieldChange("insuredName", event.target.value)
+              }
+              placeholder="Customer full name"
+            />
+          </label>
+          <label>
+            ID photo file name
+            <input
+              type="text"
+              value={applicationForm.idPhotoName}
+              onChange={(event) =>
+                handleAgentApplicationFieldChange("idPhotoName", event.target.value)
+              }
+              placeholder="e.g. id-front.jpg"
+            />
+          </label>
+          <label>
+            Date of birth
+            <input
+              type="date"
+              value={applicationForm.dateOfBirth}
+              onChange={(event) =>
+                handleAgentApplicationFieldChange("dateOfBirth", event.target.value)
+              }
+            />
+          </label>
+          <label>
+            Occupation
+            <input
+              type="text"
+              value={applicationForm.occupation}
+              onChange={(event) =>
+                handleAgentApplicationFieldChange("occupation", event.target.value)
+              }
+            />
+          </label>
+          <label>
+            Coverage period
+            <select
+              value={applicationForm.coveragePeriod}
+              onChange={(event) =>
+                handleAgentApplicationFieldChange("coveragePeriod", event.target.value)
+              }
+            >
+              <option>1 year</option>
+              <option>6 months</option>
+              <option>3 months</option>
+            </select>
+          </label>
+          <div className="agentTemplateButtonRow">
+            <button type="button" className="agentTemplateButton" onClick={handleAgentSubmitApplication}>
+              <span className="agentTemplateButtonIcon" aria-hidden="true">
+                <Icon viewBox="0 0 24 24">
+                  <path
+                    d="M6 12.5L10 16L18 8"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Icon>
+              </span>
+              <span>Submit Application</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (flowStep === "payment" && paymentState === "choose") {
+      return (
+        <div className="agentFlowEditor">
+          <div className="agentPaymentPicker">
+            <button type="button" className="agentPaymentMethod" onClick={() => handleAgentSelectPaymentMethod("WhatsApp")}>
+              <span className="agentTemplateButtonIcon" aria-hidden="true">
+                <Icon viewBox="0 0 24 24">
+                  <path
+                    d="M12 5.2C8.2 5.2 5.2 8.1 5.2 11.8C5.2 13.2 5.6 14.4 6.5 15.6L5.9 18.8L9.2 18.2C10.1 18.8 11.1 19.2 12.2 19.2C16 19.2 19 16.3 19 12.6C19 8.9 15.9 5.2 12 5.2Z"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M9.5 10.6C9.7 11.4 10.3 12.2 11 12.8C11.8 13.5 12.7 14 13.5 14.2L14.3 13.4C14.4 13.3 14.6 13.2 14.8 13.2C15.1 13.2 15.4 13.4 15.7 13.5"
+                    stroke="currentColor"
+                    strokeWidth="1.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Icon>
+              </span>
+              <span>Pay with WhatsApp</span>
+            </button>
+            <button type="button" className="agentPaymentMethod" onClick={() => handleAgentSelectPaymentMethod("GPay")}>
+              <span className="agentTemplateButtonIcon" aria-hidden="true">
+                <Icon viewBox="0 0 24 24">
+                  <path
+                    d="M4.8 12H10.4V17.2H4.8V12Z"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M11.8 7.5H18.8M11.8 12H18.8M11.8 16.5H16.2"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Icon>
+              </span>
+              <span>Pay with GPay</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (flowStep === "payment" && paymentState === "processing") {
+      return (
+        <div className="agentFlowEditor">
+          <p className="agentFlowStatusLine">
+            Processing payment with {selectedPaymentMethod || "selected method"}...
+          </p>
+        </div>
+      );
+    }
+
+    if (flowStep === "payment" && paymentState === "success") {
+      return (
+        <div className="agentFlowEditor">
+          <p className="agentFlowStatusLine successState">Customer payment successful.</p>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   const renderCustomerMessage = (message) => {
     if (message.kind === "ctaButtons") {
       return (
@@ -510,14 +846,30 @@ function App() {
           <div className="ctaButtonList">
             <button type="button" className="ctaButtonRow" onClick={handleSelectUnstructured}>
               <span className="ctaButtonIcon" aria-hidden="true">
-                ↗
+                <Icon viewBox="0 0 24 24">
+                  <path
+                    d="M6.5 12.1H17.5M13.6 8.2L17.5 12.1L13.6 16"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Icon>
               </span>
               <span>{message.cta1Label}</span>
             </button>
 
             <button type="button" className="ctaButtonRow" onClick={handleSelectStructured}>
               <span className="ctaButtonIcon" aria-hidden="true">
-                ☎
+                <Icon viewBox="0 0 24 24">
+                  <path
+                    d="M7.3 5.2H10.8L12.2 8.5L9.9 9.7C10.6 11.1 11.8 12.3 13.3 13L14.5 10.7L17.8 12.1V15.6C17.8 16.4 17.2 17 16.4 17C11 17 6.7 12.7 6.7 7.3C6.7 6.5 7.3 5.9 8.1 5.9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Icon>
               </span>
               <span>{message.cta2Label}</span>
             </button>
@@ -534,9 +886,22 @@ function App() {
             <h3>{message.title}</h3>
           </div>
           <p>{message.description}</p>
-          <button type="button" onClick={openFlow}>
-            {message.buttonLabel}
-          </button>
+          <div className="quoteCardActionRow">
+            <button type="button" className="waTemplateButton" onClick={() => openFlow("customer")}>
+              <span className="waTemplateButtonIcon" aria-hidden="true">
+                <Icon viewBox="0 0 24 24">
+                  <path
+                    d="M4 7.5H20M4 12H20M4 16.5H14"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Icon>
+              </span>
+              <span>{message.buttonLabel}</span>
+            </button>
+          </div>
         </article>
       );
     }
@@ -549,9 +914,22 @@ function App() {
             <h3>{message.title}</h3>
           </div>
           <p>{message.description}</p>
-          <button type="button" onClick={openFlow}>
-            {message.buttonLabel}
-          </button>
+          <div className="quoteCardActionRow">
+            <button type="button" className="waTemplateButton" onClick={() => openFlow("customer")}>
+              <span className="waTemplateButtonIcon" aria-hidden="true">
+                <Icon viewBox="0 0 24 24">
+                  <path
+                    d="M4 7.5H20M4 12H20M4 16.5H14"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Icon>
+              </span>
+              <span>{message.buttonLabel}</span>
+            </button>
+          </div>
         </article>
       );
     }
@@ -573,19 +951,78 @@ function App() {
       );
     }
 
+    if (message.kind === "flowSync") {
+      const isLive = !message.closed && flowMounted;
+      const currentStepLabel =
+        flowStep === "collect"
+          ? "Step 1 · Quote Intake"
+          : flowStep === "quote"
+            ? "Step 2 · Quote Preview"
+            : flowStep === "application"
+              ? "Step 3 · Application"
+              : paymentState === "choose"
+                ? "Step 4 · Payment Method"
+                : paymentState === "processing"
+                  ? "Step 4 · Processing"
+                  : "Step 4 · Paid";
+      const statusLabel = isLive
+        ? `${currentStepLabel} · Last update by ${
+            flowLastActor === "agent" ? "Agent" : "Customer"
+          }`
+        : message.finalStatus === "completed"
+          ? "Session completed"
+          : "Session closed";
+
+      return (
+        <div className="agentMessageRow agentOtherRow">
+          <article className="agentBubble agentOtherBubble agentFlowSyncCard">
+            <div className="agentFlowSyncHeader">
+              <span className={`agentFlowPulse ${isLive ? "livePulse" : ""}`} aria-hidden="true" />
+              <div>
+                <p className="agentFlowSyncTitle">Customer Journey Sync</p>
+                <p className="agentFlowSyncMeta">{statusLabel}</p>
+              </div>
+            </div>
+
+            {isLive ? renderAgentFlowSyncControls() : null}
+          </article>
+        </div>
+      );
+    }
+
     if (message.kind === "leadNotice") {
       return (
         <div className="agentMessageRow agentOtherRow">
           <article className="agentBubble agentOtherBubble leadNoticeCard">
             <p className="leadNoticeTitle">{message.text}</p>
-            <button
-              type="button"
-              className="agentInlineViewLeadBtn"
-              onClick={() => handleAgentViewLeadFromNotice(message.id, message.lead)}
-              disabled={message.viewed}
-            >
-              {message.viewed ? "Viewed" : "View Lead"}
-            </button>
+            <div className="agentTemplateButtonRow">
+              <button
+                type="button"
+                className="agentTemplateButton"
+                onClick={() => handleAgentViewLeadFromNotice(message.id, message.lead)}
+                disabled={message.viewed}
+              >
+                <span className="agentTemplateButtonIcon" aria-hidden="true">
+                  <Icon viewBox="0 0 24 24">
+                    <path
+                      d="M12 12.1C14.1 12.1 15.9 10.4 15.9 8.2C15.9 6.1 14.1 4.4 12 4.4C9.8 4.4 8.1 6.1 8.1 8.2C8.1 10.4 9.8 12.1 12 12.1Z"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M5.5 19.3C6.3 16.8 8.9 15.2 12 15.2C15.1 15.2 17.7 16.8 18.5 19.3"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Icon>
+                </span>
+                <span>{message.viewed ? "Viewed" : "View Lead"}</span>
+              </button>
+            </div>
           </article>
         </div>
       );
@@ -609,14 +1046,27 @@ function App() {
               <li>Age: {lead.age}</li>
               <li>Product: {lead.product}</li>
             </ul>
-            <button
-              type="button"
-              className="agentInlineContactBtn"
-              onClick={() => handleAgentContactLead(message.id, lead)}
-              disabled={message.contacted}
-            >
-              {message.contacted ? "Contacted" : "Contact"}
-            </button>
+            <div className="agentTemplateButtonRow">
+              <button
+                type="button"
+                className="agentTemplateButton"
+                onClick={() => handleAgentContactLead(message.id, lead)}
+                disabled={message.contacted}
+              >
+                <span className="agentTemplateButtonIcon" aria-hidden="true">
+                  <Icon viewBox="0 0 24 24">
+                    <path
+                      d="M7.3 5.2H10.8L12.2 8.5L9.9 9.7C10.6 11.1 11.8 12.3 13.3 13L14.5 10.7L17.8 12.1V15.6C17.8 16.4 17.2 17 16.4 17C11 17 6.7 12.7 6.7 7.3C6.7 6.5 7.3 5.9 8.1 5.9"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Icon>
+                </span>
+                <span>{message.contacted ? "Contacted" : "Contact"}</span>
+              </button>
+            </div>
           </article>
         </div>
       );
@@ -637,7 +1087,7 @@ function App() {
   return (
     <div className="dualContainer">
       <section className="viewPane">
-        <h2 className="panelTitle">Customer： John Doe</h2>
+        <h2 className="panelTitle">Customer</h2>
         <div className="iphoneFrame customerFrame">
           <div className="dynamicIsland" />
           <div className="screen">
@@ -841,6 +1291,9 @@ function App() {
                       4
                     </span>
                   </div>
+                  <p className="flowSyncHint">
+                    Live sync: last update by {flowLastActor === "agent" ? "Agent" : "Customer"}
+                  </p>
 
                   {flowStep === "collect" ? (
                     <form className="flowForm" onSubmit={handleGeneratePreview}>
@@ -999,7 +1452,7 @@ function App() {
                           className={`paymentOptionCard ${
                             selectedPaymentMethod === "WhatsApp" ? "selectedPaymentOption" : ""
                           }`}
-                          onClick={() => handleSelectPaymentMethod("WhatsApp")}
+                          onClick={() => handleSelectPaymentMethod("WhatsApp", "customer")}
                         >
                           <span className="paymentOptionIcon whatsappPayIcon">W</span>
                           <span className="paymentOptionText">
@@ -1017,7 +1470,7 @@ function App() {
                           className={`paymentOptionCard ${
                             selectedPaymentMethod === "GPay" ? "selectedPaymentOption" : ""
                           }`}
-                          onClick={() => handleSelectPaymentMethod("GPay")}
+                          onClick={() => handleSelectPaymentMethod("GPay", "customer")}
                         >
                           <span className="paymentOptionIcon gpayIcon">G</span>
                           <span className="paymentOptionText">
@@ -1057,7 +1510,7 @@ function App() {
       </section>
 
       <section className="viewPane">
-        <h2 className="panelTitle">Agent：Alex Loru</h2>
+        <h2 className="panelTitle">Agent</h2>
         <div className="iphoneFrame agentFrame">
           <div className="dynamicIsland" />
           <div className="agentScreen">

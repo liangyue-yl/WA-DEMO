@@ -1,0 +1,30 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "WhatsApp-style insurance chat demo with structured and unstructured modes",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liangyue-yl/WA-DEMO.git"
+  },
+  "keywords": [],
+  "author": "Cursor Cloud Agent",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/liangyue-yl/WA-DEMO/issues"
+  },
+  "homepage": "https://github.com/liangyue-yl/WA-DEMO#readme",
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.4",
+    "vite": "^7.3.1"
+  }
+}

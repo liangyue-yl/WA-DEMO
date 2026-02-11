@@ -7,7 +7,7 @@ const quoteFormDefaults = {
   coverage: "500k",
 };
 
-const formatChatTime = () =>
+const formatTime = () =>
   new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
@@ -15,7 +15,7 @@ const formatChatTime = () =>
 
 const createMessage = (payload) => ({
   id: ++messageId,
-  time: formatChatTime(),
+  time: formatTime(),
   entering: true,
   ...payload,
 });
@@ -83,7 +83,19 @@ function App() {
   const [flowMounted, setFlowMounted] = useState(false);
   const [flowVisible, setFlowVisible] = useState(false);
   const [typingCount, setTypingCount] = useState(0);
-  const chatViewportRef = useRef(null);
+
+  const [agentMessages, setAgentMessages] = useState(() => [
+    createMessage({
+      sender: "system",
+      kind: "system",
+      text: "Ignite Agent Dashboard connected.",
+    }),
+  ]);
+  const [agentDraft, setAgentDraft] = useState("");
+  const [showManageMenu, setShowManageMenu] = useState(false);
+
+  const customerViewportRef = useRef(null);
+  const agentViewportRef = useRef(null);
   const timerBucketRef = useRef([]);
 
   const isTyping = typingCount > 0;
@@ -93,6 +105,28 @@ function App() {
     const timerId = setTimeout(callback, delay);
     timerBucketRef.current.push(timerId);
   };
+
+  const appendWithSetter = (setter, payload, options = {}) => {
+    const { animate = true } = options;
+    const nextMessage = createMessage(payload);
+
+    setter((previous) => [...previous, { ...nextMessage, entering: animate }]);
+
+    if (animate) {
+      queueTimer(() => {
+        setter((previous) =>
+          previous.map((item) =>
+            item.id === nextMessage.id ? { ...item, entering: false } : item,
+          ),
+        );
+      }, 230);
+    }
+  };
+
+  const appendCustomerMessage = (payload, options = {}) =>
+    appendWithSetter(setMessages, payload, options);
+  const appendAgentMessage = (payload, options = {}) =>
+    appendWithSetter(setAgentMessages, payload, options);
 
   const modeHint = useMemo(() => {
     if (mode === "unstructured") {
@@ -107,14 +141,24 @@ function App() {
   }, [isTyping, mode]);
 
   useEffect(() => {
-    if (!chatViewportRef.current) {
+    if (!customerViewportRef.current) {
       return;
     }
-    chatViewportRef.current.scrollTo({
-      top: chatViewportRef.current.scrollHeight,
+    customerViewportRef.current.scrollTo({
+      top: customerViewportRef.current.scrollHeight,
       behavior: "smooth",
     });
   }, [messages, isTyping, flowMounted]);
+
+  useEffect(() => {
+    if (!agentViewportRef.current) {
+      return;
+    }
+    agentViewportRef.current.scrollTo({
+      top: agentViewportRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [agentMessages]);
 
   useEffect(
     () => () => {
@@ -124,31 +168,11 @@ function App() {
     [],
   );
 
-  const appendMessage = (payload, options = {}) => {
-    const { animate = true } = options;
-    const nextMessage = createMessage(payload);
-
-    setMessages((previous) => [
-      ...previous,
-      { ...nextMessage, entering: animate },
-    ]);
-
-    if (animate) {
-      queueTimer(() => {
-        setMessages((previous) =>
-          previous.map((item) =>
-            item.id === nextMessage.id ? { ...item, entering: false } : item,
-          ),
-        );
-      }, 260);
-    }
-  };
-
   const queueAiMessage = (payload, delay = 950) => {
     setTypingCount((count) => count + 1);
     queueTimer(() => {
       setTypingCount((count) => Math.max(0, count - 1));
-      appendMessage({
+      appendCustomerMessage({
         sender: "ai",
         ...payload,
       });
@@ -158,7 +182,7 @@ function App() {
   const runLeadQualificationScript = () => {
     setAwaitingOccupation(true);
 
-    appendMessage({
+    appendCustomerMessage({
       sender: "system",
       kind: "system",
       text: "Switched to AI consultation mode.",
@@ -177,7 +201,7 @@ function App() {
     const normalizedOccupation = occupation.trim();
 
     queueTimer(() => {
-      appendMessage({
+      appendCustomerMessage({
         sender: "system",
         kind: "system",
         text: "[System captured a high-intent lead and transferred to Agent]",
@@ -185,7 +209,7 @@ function App() {
     }, 420);
 
     queueTimer(() => {
-      appendMessage({
+      appendCustomerMessage({
         sender: "agent",
         kind: "text",
         text: `I am your advisor. This is a Personal Accident plan tailored for your occupation (${normalizedOccupation}). Please review it.`,
@@ -193,7 +217,7 @@ function App() {
     }, 1000);
 
     queueTimer(() => {
-      appendMessage({
+      appendCustomerMessage({
         sender: "agent",
         kind: "quoteCard",
         title: "Personal Accident Quote",
@@ -211,7 +235,7 @@ function App() {
 
   const handleSelectStructured = () => {
     setMode("structured");
-    appendMessage({
+    appendCustomerMessage({
       sender: "ai",
       kind: "quoteCard",
       title: "Personal Accident Quote Sheet",
@@ -226,7 +250,7 @@ function App() {
       return;
     }
 
-    appendMessage({
+    appendCustomerMessage({
       sender: "user",
       kind: "text",
       text: cleanedText,
@@ -236,6 +260,11 @@ function App() {
     if (awaitingOccupation) {
       setAwaitingOccupation(false);
       setCapturedOccupation(cleanedText);
+      appendAgentMessage({
+        sender: "system",
+        kind: "system",
+        text: "You have a new Lead",
+      });
       showLeadTransfer(cleanedText);
       return;
     }
@@ -269,7 +298,7 @@ function App() {
   };
 
   const showAssistantButtons = () => {
-    appendMessage({
+    appendCustomerMessage({
       sender: "ai",
       kind: "ctaButtons",
       agentName: "Ignite Agent",
@@ -344,15 +373,100 @@ function App() {
 
     queueTimer(() => {
       closeFlow();
-      appendMessage({
+      appendCustomerMessage({
         sender: "ai",
         kind: "text",
         text: `Payment Successful via ${method}. Your Personal Accident e-policy will be shared in this chat shortly.`,
       });
+      appendAgentMessage({
+        sender: "system",
+        kind: "system",
+        text: "John Doe has paid the premium, your commission has been received.",
+      });
     }, 2720);
   };
 
-  const renderMessage = (message) => {
+  const handleAgentSendMessage = () => {
+    const cleanedText = agentDraft.trim();
+    if (!cleanedText) {
+      return;
+    }
+
+    appendAgentMessage({
+      sender: "agent",
+      kind: "text",
+      text: cleanedText,
+    });
+    setAgentDraft("");
+  };
+
+  const handleAgentManageAction = (action) => {
+    setShowManageMenu(false);
+
+    if (action === "View Lead") {
+      appendAgentMessage({
+        sender: "ai",
+        kind: "text",
+        text: "AI Lead Summary\n- Occupation: Riders\n- Age: 30\n- Product: Personal Accident",
+      });
+      return;
+    }
+
+    appendAgentMessage({
+      sender: "ai",
+      kind: "text",
+      text: "Sales Report\n- New Leads: 12\n- Qualified Leads: 8\n- PA Conversions: 5",
+    });
+  };
+
+  const handleAgentShareQuote = () => {
+    setShowManageMenu(false);
+    appendAgentMessage({
+      sender: "system",
+      kind: "system",
+      text: "Personal Accident quote shared to John Doe.",
+    });
+    appendCustomerMessage({
+      sender: "agent",
+      kind: "sharedQuoteCard",
+      title: "Personal Accident Quote Card",
+      description: "Recommended annual plan for John Doe",
+      buttonLabel: "Pay Now",
+      paid: false,
+    });
+  };
+
+  const handleCustomerPayNow = (messageId) => {
+    let paidNow = false;
+
+    setMessages((previous) =>
+      previous.map((item) => {
+        if (item.id !== messageId || item.kind !== "sharedQuoteCard" || item.paid) {
+          return item;
+        }
+        paidNow = true;
+        return { ...item, paid: true };
+      }),
+    );
+
+    if (!paidNow) {
+      return;
+    }
+
+    appendCustomerMessage({
+      sender: "system",
+      kind: "system",
+      text: "Payment Successful",
+    });
+
+    appendAgentMessage({
+      sender: "system",
+      kind: "system",
+      text: "John Doe has paid the premium, your commission has been received.",
+    });
+  };
+
+  const renderCustomerMessage = (message) => {
     if (message.kind === "ctaButtons") {
       return (
         <article className="ctaTemplateCard">
@@ -397,6 +511,25 @@ function App() {
       );
     }
 
+    if (message.kind === "sharedQuoteCard") {
+      return (
+        <article className="quoteCard">
+          <div className="quoteCardTop">
+            <span className="quoteTag">Shared by Agent</span>
+            <h3>{message.title}</h3>
+          </div>
+          <p>{message.description}</p>
+          <button
+            type="button"
+            disabled={message.paid}
+            onClick={() => handleCustomerPayNow(message.id)}
+          >
+            {message.paid ? "Paid" : message.buttonLabel}
+          </button>
+        </article>
+      );
+    }
+
     return (
       <>
         {message.sender === "agent" ? <span className="agentRoleTag">Human Agent</span> : null}
@@ -405,105 +538,87 @@ function App() {
     );
   };
 
+  const renderAgentMessage = (message) => {
+    if (message.kind === "system") {
+      return (
+        <div className="agentMessageRow centerRow">
+          <span className="agentSystemNotice">{message.text}</span>
+        </div>
+      );
+    }
+
+    const isSelf = message.sender === "agent";
+
+    return (
+      <div className={`agentMessageRow ${isSelf ? "agentSelfRow" : "agentOtherRow"}`}>
+        <article className={`agentBubble ${isSelf ? "agentSelfBubble" : "agentOtherBubble"}`}>
+          <p>{message.text}</p>
+          <span className="agentMetaTime">{message.time}</span>
+        </article>
+      </div>
+    );
+  };
+
   return (
-    <div className="appShell">
-      <div className="iphoneFrame">
-        <div className="dynamicIsland" />
-        <div className="screen">
-          <header className="chatHeader">
-            <div className="statusLine">
-              <span>9:41</span>
-              <span>5G ▮▮▮ 100%</span>
-            </div>
-
-            <div className="conversationMeta">
-              <button type="button" className="headerNavButton" aria-label="Back">
-                <Icon>
-                  <path
-                    d="M14.5 5L8 11.5L14.5 18"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Icon>
-              </button>
-
-              <div className="avatarRing">
-                <div className="avatar">AI</div>
+    <div className="dualContainer">
+      <section className="viewPane">
+        <h2 className="panelTitle">Customer： John Doe</h2>
+        <div className="iphoneFrame customerFrame">
+          <div className="dynamicIsland" />
+          <div className="screen">
+            <header className="chatHeader">
+              <div className="statusLine">
+                <span>9:41</span>
+                <span>5G ▮▮▮ 100%</span>
               </div>
 
-              <div className="titleStack">
-                <h1>Ignite Agent</h1>
-                <p>{isTyping ? "typing..." : "online"}</p>
-              </div>
-
-              <div className="headerActions">
-                <button type="button" className="headerIconButton" aria-label="Video call">
+              <div className="conversationMeta">
+                <button type="button" className="headerNavButton" aria-label="Back">
                   <Icon>
                     <path
-                      d="M3.5 7.5C3.5 6.4 4.4 5.5 5.5 5.5H12.5C13.6 5.5 14.5 6.4 14.5 7.5V16.5C14.5 17.6 13.6 18.5 12.5 18.5H5.5C4.4 18.5 3.5 17.6 3.5 16.5V7.5Z"
+                      d="M14.5 5L8 11.5L14.5 18"
                       stroke="currentColor"
-                      strokeWidth="1.7"
-                    />
-                    <path
-                      d="M14.5 10L19.5 7.5V16.5L14.5 14"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinejoin="round"
-                    />
-                  </Icon>
-                </button>
-                <button type="button" className="headerIconButton" aria-label="Call">
-                  <Icon>
-                    <path
-                      d="M7.2 4.6L9.1 6.5C9.7 7.1 9.9 8 9.5 8.7L8.8 10C9.8 12.1 11.5 13.9 13.7 15L15 14.3C15.8 13.9 16.7 14.1 17.3 14.7L19.2 16.6C19.8 17.2 20 18.1 19.5 18.9C18.7 20.3 17 21 15.4 20.6C9.4 19.3 4.6 14.5 3.2 8.4C2.8 6.8 3.5 5.1 4.9 4.3C5.7 3.8 6.6 4 7.2 4.6Z"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
+                      strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     />
                   </Icon>
                 </button>
-                <button type="button" className="headerIconButton" aria-label="More actions">
-                  <Icon viewBox="0 0 24 24">
-                    <circle cx="12" cy="5.5" r="1.6" fill="currentColor" />
-                    <circle cx="12" cy="12" r="1.6" fill="currentColor" />
-                    <circle cx="12" cy="18.5" r="1.6" fill="currentColor" />
-                  </Icon>
-                </button>
-              </div>
-            </div>
-          </header>
 
-          <main className="chatViewport" ref={chatViewportRef}>
-            <div className="dateBadge">Today</div>
-            <div className="encryptionBanner">
-              <Icon>
-                <rect
-                  x="7"
-                  y="11"
-                  width="10"
-                  height="8"
-                  rx="2"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                />
-                <path
-                  d="M9.5 11V8.8C9.5 7.1 10.9 5.8 12.5 5.8C14.1 5.8 15.5 7.1 15.5 8.8V11"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                />
-              </Icon>
-              Messages and calls are end-to-end encrypted.
-            </div>
+                <div className="avatarRing">
+                  <div className="avatar">AI</div>
+                </div>
 
-            {messages.length === 0 ? (
-              <div className="emptyState">
-                <p>Tap Menu to choose assistant mode.</p>
+                <div className="titleStack">
+                  <h1>Ignite Agent</h1>
+                  <p>{isTyping ? "typing..." : "online"}</p>
+                </div>
               </div>
-            ) : (
-              messages.map((message) => (
+            </header>
+
+            <main className="chatViewport" ref={customerViewportRef}>
+              <div className="dateBadge">Today</div>
+              <div className="encryptionBanner">
+                <Icon>
+                  <rect
+                    x="7"
+                    y="11"
+                    width="10"
+                    height="8"
+                    rx="2"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                  />
+                  <path
+                    d="M9.5 11V8.8C9.5 7.1 10.9 5.8 12.5 5.8C14.1 5.8 15.5 7.1 15.5 8.8V11"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                  />
+                </Icon>
+                Messages and calls are end-to-end encrypted.
+              </div>
+
+              {messages.map((message) =>
                 message.kind === "system" ? (
                   <div
                     key={message.id}
@@ -529,7 +644,7 @@ function App() {
                             : "aiBubble"
                       }`}
                     >
-                      {renderMessage(message)}
+                      {renderCustomerMessage(message)}
                       {message.kind === "text" ? (
                         <div
                           className={`messageMeta ${
@@ -537,356 +652,270 @@ function App() {
                           }`}
                         >
                           <span>{message.time}</span>
-                          {message.sender === "user" ? (
-                            <span className="doubleCheck">
-                              <Icon viewBox="0 0 16 16">
-                                <path
-                                  d="M2.4 8.4L5.1 11L8.4 7.6M6.8 8.3L9.5 11L13.6 6.8"
-                                  stroke="currentColor"
-                                  strokeWidth="1.5"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </Icon>
-                            </span>
-                          ) : null}
                         </div>
                       ) : null}
                     </div>
                   </div>
-                )
-              ))
-            )}
-
-            {isTyping ? (
-              <div className="messageRow aiRow typingRow">
-                <div className="bubble aiBubble typingBubble">
-                  <div className="typingDots" aria-label="AI is typing">
-                    <span className="typingDot" />
-                    <span className="typingDot" />
-                    <span className="typingDot" />
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </main>
-
-          <footer className="chatComposer">
-            <button
-              type="button"
-              className="menuButton"
-              onClick={showAssistantButtons}
-            >
-              Menu
-            </button>
-
-            {mode === "unstructured" ? (
-              <div className="inputDock">
-                <button type="button" className="composerIcon" aria-label="Emoji">
-                  <Icon>
-                    <circle cx="12" cy="12" r="8.2" stroke="currentColor" strokeWidth="1.6" />
-                    <path
-                      d="M9.2 14.6C10 15.5 11 16 12.1 16C13.2 16 14.2 15.5 15 14.6"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                    <circle cx="9.5" cy="10.2" r="0.9" fill="currentColor" />
-                    <circle cx="14.5" cy="10.2" r="0.9" fill="currentColor" />
-                  </Icon>
-                </button>
-
-                <input
-                  aria-label="Type your message"
-                  className="sendTextInput"
-                  placeholder="Ask about insurance plans..."
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                />
-
-                <button type="button" className="composerIcon" aria-label="Attach file">
-                  <Icon>
-                    <path
-                      d="M8.5 12.6L13.7 7.4C15 6.2 17 6.2 18.2 7.4C19.4 8.6 19.4 10.6 18.2 11.8L11.7 18.3C9.7 20.3 6.4 20.3 4.4 18.3C2.4 16.3 2.4 13 4.4 11L10.1 5.3"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </Icon>
-                </button>
-              </div>
-            ) : (
-              <div className="modeHint">{modeHint}</div>
-            )}
-
-            <button
-              type="button"
-              className={`actionButton ${canSend ? "canSend" : ""}`}
-              onClick={canSend ? handleSendMessage : undefined}
-              aria-label={canSend ? "Send message" : "Record voice message"}
-            >
-              {canSend ? (
-                <Icon>
-                  <path
-                    d="M4 12L20 4L14 20L11.3 13.8L4 12Z"
-                    fill="currentColor"
-                    stroke="currentColor"
-                    strokeWidth="0.5"
-                    strokeLinejoin="round"
-                  />
-                </Icon>
-              ) : (
-                <Icon>
-                  <path
-                    d="M12 4.5C10.3 4.5 8.9 5.9 8.9 7.6V12.1C8.9 13.8 10.3 15.2 12 15.2C13.7 15.2 15.1 13.8 15.1 12.1V7.6C15.1 5.9 13.7 4.5 12 4.5Z"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                  />
-                  <path
-                    d="M6.8 11.8C6.8 14.6 9.1 16.9 12 16.9C14.9 16.9 17.2 14.6 17.2 11.8"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M12 16.9V20"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                  />
-                </Icon>
+                ),
               )}
-            </button>
-          </footer>
 
-          {flowMounted ? (
-            <section
-              className={`flowOverlay ${flowVisible ? "flowVisible" : ""}`}
-              aria-modal="true"
-              role="dialog"
-            >
-              <div className="flowSheet">
-                <header className="flowHeader">
-                  <span className="flowHandle" />
-                  <div className="flowHeaderBar">
-                    <button
-                      type="button"
-                      className="flowCloseButton"
-                      onClick={closeFlow}
-                      aria-label="Close flow"
-                    >
-                      <Icon>
-                        <path
-                          d="M18 8L12 14L6 8"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </Icon>
-                    </button>
-                    <div>
-                      <h2 className="flowTitle">PA Quote Flow</h2>
-                      <p className="flowCaption">WhatsApp Flow</p>
+              {isTyping ? (
+                <div className="messageRow aiRow typingRow">
+                  <div className="bubble aiBubble typingBubble">
+                    <div className="typingDots" aria-label="AI is typing">
+                      <span className="typingDot" />
+                      <span className="typingDot" />
+                      <span className="typingDot" />
                     </div>
                   </div>
-                </header>
-
-                <div className="flowProgressBar" aria-label="Flow steps">
-                  <span
-                    className={`progressStep ${
-                      flowStep === "collect" ? "activeStep" : ""
-                    }`}
-                  >
-                    1
-                  </span>
-                  <span
-                    className={`progressStep ${
-                      flowStep === "quote" ? "activeStep" : ""
-                    }`}
-                  >
-                    2
-                  </span>
-                  <span
-                    className={`progressStep ${
-                      flowStep === "application" ? "activeStep" : ""
-                    }`}
-                  >
-                    3
-                  </span>
-                  <span
-                    className={`progressStep ${
-                      flowStep === "payment" ? "activeStep" : ""
-                    }`}
-                  >
-                    4
-                  </span>
                 </div>
+              ) : null}
+            </main>
 
-                {flowStep === "collect" ? (
-                  <form className="flowForm" onSubmit={handleGeneratePreview}>
-                    <section className="flowSection">
-                      <h3 className="flowSectionTitle">Step 1 · Information Collection</h3>
+            <footer className="chatComposer">
+              <button type="button" className="menuButton" onClick={showAssistantButtons}>
+                Menu
+              </button>
 
-                      <label>
-                        Age
-                        <input
-                          required
-                          min="18"
-                          max="70"
-                          name="age"
-                          type="number"
-                          placeholder="e.g. 32"
-                          value={quoteForm.age}
-                          onChange={handleQuoteFormChange}
-                        />
-                      </label>
+              {mode === "unstructured" ? (
+                <div className="inputDock">
+                  <input
+                    aria-label="Type your message"
+                    className="sendTextInput"
+                    placeholder="Ask about insurance plans..."
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="modeHint">{modeHint}</div>
+              )}
 
-                      <fieldset className="coverageFieldset">
-                        <legend>Coverage amount</legend>
-                        <label className="coverageOption">
-                          <input
-                            type="radio"
-                            name="coverage"
-                            value="500k"
-                            checked={quoteForm.coverage === "500k"}
-                            onChange={handleQuoteFormChange}
+              <button
+                type="button"
+                className={`actionButton ${canSend ? "canSend" : ""}`}
+                onClick={canSend ? handleSendMessage : undefined}
+                aria-label={canSend ? "Send message" : "Record voice message"}
+              >
+                Send
+              </button>
+            </footer>
+
+            {flowMounted ? (
+              <section
+                className={`flowOverlay ${flowVisible ? "flowVisible" : ""}`}
+                aria-modal="true"
+                role="dialog"
+              >
+                <div className="flowSheet">
+                  <header className="flowHeader">
+                    <span className="flowHandle" />
+                    <div className="flowHeaderBar">
+                      <button
+                        type="button"
+                        className="flowCloseButton"
+                        onClick={closeFlow}
+                        aria-label="Close flow"
+                      >
+                        <Icon>
+                          <path
+                            d="M18 8L12 14L6 8"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
                           />
-                          <span>CNY 500,000</span>
-                        </label>
-                        <label className="coverageOption">
-                          <input
-                            type="radio"
-                            name="coverage"
-                            value="1m"
-                            checked={quoteForm.coverage === "1m"}
-                            onChange={handleQuoteFormChange}
-                          />
-                          <span>CNY 1,000,000</span>
-                        </label>
-                      </fieldset>
-                    </section>
+                        </Icon>
+                      </button>
+                      <div>
+                        <h2 className="flowTitle">PA Quote Flow</h2>
+                        <p className="flowCaption">WhatsApp Flow</p>
+                      </div>
+                    </div>
+                  </header>
 
-                    <button type="submit" className="flowSubmit">
-                      View Plan
-                    </button>
-                  </form>
-                ) : null}
-
-                {flowStep === "quote" && quotePreview ? (
-                  <section className="flowPreviewPane">
-                    <h3 className="flowSectionTitle">Step 2 · Quote Sheet</h3>
-                    <table className="quoteTable">
-                      <tbody>
-                        <tr>
-                          <th>Death / Disability Benefit</th>
-                          <td>CNY 500,000</td>
-                        </tr>
-                        <tr>
-                          <th>Accidental Medical</th>
-                          <td>CNY 50,000</td>
-                        </tr>
-                        <tr>
-                          <th>Price</th>
-                          <td className="quotePriceCell">CNY 199 / year</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <p className="quotePreviewMeta">
-                      Age {quotePreview.age} · Selected coverage {quotePreview.coverage === "1m" ? "CNY 1,000,000" : "CNY 500,000"}
-                    </p>
-                    <button
-                      type="button"
-                      className="flowSubmit"
-                      onClick={handleContinueToApplication}
+                  <div className="flowProgressBar" aria-label="Flow steps">
+                    <span
+                      className={`progressStep ${
+                        flowStep === "collect" ? "activeStep" : ""
+                      }`}
                     >
-                      Buy Now
-                    </button>
-                  </section>
-                ) : null}
+                      1
+                    </span>
+                    <span
+                      className={`progressStep ${flowStep === "quote" ? "activeStep" : ""}`}
+                    >
+                      2
+                    </span>
+                    <span
+                      className={`progressStep ${
+                        flowStep === "application" ? "activeStep" : ""
+                      }`}
+                    >
+                      3
+                    </span>
+                    <span
+                      className={`progressStep ${flowStep === "payment" ? "activeStep" : ""}`}
+                    >
+                      4
+                    </span>
+                  </div>
 
-                {flowStep === "application" ? (
-                  <form className="flowForm" onSubmit={handleSubmitApplication}>
-                    <section className="flowSection">
-                      <h3 className="flowSectionTitle">Step 3 · Application Form</h3>
+                  {flowStep === "collect" ? (
+                    <form className="flowForm" onSubmit={handleGeneratePreview}>
+                      <section className="flowSection">
+                        <h3 className="flowSectionTitle">Step 1 · Information Collection</h3>
+                        <label>
+                          Age
+                          <input
+                            required
+                            min="18"
+                            max="70"
+                            name="age"
+                            type="number"
+                            placeholder="e.g. 32"
+                            value={quoteForm.age}
+                            onChange={handleQuoteFormChange}
+                          />
+                        </label>
 
-                      <label>
-                        Insured name
-                        <input
-                          required
-                          name="insuredName"
-                          type="text"
-                          placeholder="e.g. Alex Lin"
-                          value={applicationForm.insuredName}
-                          onChange={handleApplicationChange}
-                        />
-                      </label>
+                        <fieldset className="coverageFieldset">
+                          <legend>Coverage amount</legend>
+                          <label className="coverageOption">
+                            <input
+                              type="radio"
+                              name="coverage"
+                              value="500k"
+                              checked={quoteForm.coverage === "500k"}
+                              onChange={handleQuoteFormChange}
+                            />
+                            <span>CNY 500,000</span>
+                          </label>
+                          <label className="coverageOption">
+                            <input
+                              type="radio"
+                              name="coverage"
+                              value="1m"
+                              checked={quoteForm.coverage === "1m"}
+                              onChange={handleQuoteFormChange}
+                            />
+                            <span>CNY 1,000,000</span>
+                          </label>
+                        </fieldset>
+                      </section>
+                      <button type="submit" className="flowSubmit">
+                        View Plan
+                      </button>
+                    </form>
+                  ) : null}
 
-                      <label>
-                        Insured photo of ID
-                        <input
-                          required
-                          name="idPhotoName"
-                          type="file"
-                          accept="image/*"
-                          onChange={handleApplicationChange}
-                        />
-                        {applicationForm.idPhotoName ? (
-                          <span className="fileNameHint">{applicationForm.idPhotoName}</span>
-                        ) : null}
-                      </label>
-
-                      <label>
-                        Date of birth
-                        <input
-                          required
-                          name="dateOfBirth"
-                          type="date"
-                          value={applicationForm.dateOfBirth}
-                          onChange={handleApplicationChange}
-                        />
-                      </label>
-
-                      <label>
-                        Occupation
-                        <input
-                          required
-                          name="occupation"
-                          type="text"
-                          value={applicationForm.occupation}
-                          onChange={handleApplicationChange}
-                        />
-                      </label>
-
-                      <label>
-                        Coverage period
-                        <select
-                          name="coveragePeriod"
-                          value={applicationForm.coveragePeriod}
-                          onChange={handleApplicationChange}
-                        >
-                          <option>1 year</option>
-                          <option>6 months</option>
-                          <option>3 months</option>
-                        </select>
-                      </label>
+                  {flowStep === "quote" && quotePreview ? (
+                    <section className="flowPreviewPane">
+                      <h3 className="flowSectionTitle">Step 2 · Quote Sheet</h3>
+                      <table className="quoteTable">
+                        <tbody>
+                          <tr>
+                            <th>Death / Disability Benefit</th>
+                            <td>CNY 500,000</td>
+                          </tr>
+                          <tr>
+                            <th>Accidental Medical</th>
+                            <td>CNY 50,000</td>
+                          </tr>
+                          <tr>
+                            <th>Price</th>
+                            <td className="quotePriceCell">CNY 199 / year</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <p className="quotePreviewMeta">
+                        Age {quotePreview.age} · Selected coverage{" "}
+                        {quotePreview.coverage === "1m" ? "CNY 1,000,000" : "CNY 500,000"}
+                      </p>
+                      <button
+                        type="button"
+                        className="flowSubmit"
+                        onClick={handleContinueToApplication}
+                      >
+                        Buy Now
+                      </button>
                     </section>
+                  ) : null}
 
-                    <button type="submit" className="flowSubmit">
-                      Pay Now
-                    </button>
-                  </form>
-                ) : null}
+                  {flowStep === "application" ? (
+                    <form className="flowForm" onSubmit={handleSubmitApplication}>
+                      <section className="flowSection">
+                        <h3 className="flowSectionTitle">Step 3 · Application Form</h3>
+                        <label>
+                          Insured name
+                          <input
+                            required
+                            name="insuredName"
+                            type="text"
+                            placeholder="e.g. Alex Lin"
+                            value={applicationForm.insuredName}
+                            onChange={handleApplicationChange}
+                          />
+                        </label>
+                        <label>
+                          Insured photo of ID
+                          <input
+                            required
+                            name="idPhotoName"
+                            type="file"
+                            accept="image/*"
+                            onChange={handleApplicationChange}
+                          />
+                          {applicationForm.idPhotoName ? (
+                            <span className="fileNameHint">{applicationForm.idPhotoName}</span>
+                          ) : null}
+                        </label>
+                        <label>
+                          Date of birth
+                          <input
+                            required
+                            name="dateOfBirth"
+                            type="date"
+                            value={applicationForm.dateOfBirth}
+                            onChange={handleApplicationChange}
+                          />
+                        </label>
+                        <label>
+                          Occupation
+                          <input
+                            required
+                            name="occupation"
+                            type="text"
+                            value={applicationForm.occupation}
+                            onChange={handleApplicationChange}
+                          />
+                        </label>
+                        <label>
+                          Coverage period
+                          <select
+                            name="coveragePeriod"
+                            value={applicationForm.coveragePeriod}
+                            onChange={handleApplicationChange}
+                          >
+                            <option>1 year</option>
+                            <option>6 months</option>
+                            <option>3 months</option>
+                          </select>
+                        </label>
+                      </section>
+                      <button type="submit" className="flowSubmit">
+                        Pay Now
+                      </button>
+                    </form>
+                  ) : null}
 
-                {flowStep === "payment" ? (
-                  paymentState === "choose" ? (
+                  {flowStep === "payment" && paymentState === "choose" ? (
                     <section className="flowStatusPane">
                       <h3 className="flowSectionTitle">Step 4 · Select payment method</h3>
                       <div className="paymentCardList">
@@ -928,29 +957,97 @@ function App() {
                         </button>
                       </div>
                     </section>
-                  ) : null
-                ) : null}
+                  ) : null}
 
-                {flowStep === "payment" && paymentState === "processing" ? (
-                  <section className="flowStatusPane">
-                    <span className="flowLoadingSpinner" aria-hidden="true" />
-                    <p>Processing payment with {selectedPaymentMethod}...</p>
-                  </section>
-                ) : null}
+                  {flowStep === "payment" && paymentState === "processing" ? (
+                    <section className="flowStatusPane">
+                      <span className="flowLoadingSpinner" aria-hidden="true" />
+                      <p>Processing payment with {selectedPaymentMethod}...</p>
+                    </section>
+                  ) : null}
 
-                {flowStep === "payment" && paymentState === "success" ? (
-                  <section className="flowStatusPane">
-                    <span className="flowSuccessIcon" aria-hidden="true">
-                      ✓
-                    </span>
-                    <p className="successLabel">Payment Successful</p>
-                  </section>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
+                  {flowStep === "payment" && paymentState === "success" ? (
+                    <section className="flowStatusPane">
+                      <span className="flowSuccessIcon" aria-hidden="true">
+                        ✓
+                      </span>
+                      <p className="successLabel">Payment Successful</p>
+                    </section>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
+          </div>
         </div>
-      </div>
+      </section>
+
+      <section className="viewPane">
+        <h2 className="panelTitle">Agent：Alex Loru</h2>
+        <div className="iphoneFrame agentFrame">
+          <div className="dynamicIsland" />
+          <div className="agentScreen">
+            <header className="agentHeader">
+              <h3>Agent Workspace</h3>
+              <span className="agentOnline">online</span>
+              <p className="dashboardLabel">Ignite Agent Dashboard</p>
+            </header>
+
+            <main className="agentViewport" ref={agentViewportRef}>
+              <div className="dateBadge agentDateBadge">Today</div>
+              {agentMessages.map((message) => (
+                <div key={message.id}>{renderAgentMessage(message)}</div>
+              ))}
+            </main>
+
+            {showManageMenu ? (
+              <>
+                <button
+                  type="button"
+                  className="agentManageBackdrop"
+                  aria-label="Close manage menu"
+                  onClick={() => setShowManageMenu(false)}
+                />
+                <section className="agentManageMenu">
+                  <h4>List Message</h4>
+                  <button type="button" onClick={() => handleAgentManageAction("View Lead")}>
+                    View Lead
+                  </button>
+                  <button type="button" onClick={() => handleAgentManageAction("Sales Report")}>
+                    Sales Report
+                  </button>
+                </section>
+              </>
+            ) : null}
+
+            <footer className="agentComposer">
+              <input
+                value={agentDraft}
+                onChange={(event) => setAgentDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleAgentSendMessage();
+                  }
+                }}
+                placeholder="Reply as Agent..."
+              />
+              <button
+                type="button"
+                className="agentManageTrigger"
+                onClick={() => setShowManageMenu((open) => !open)}
+              >
+                ⚡ Manage
+              </button>
+              <button type="button" className="agentShareBtn" onClick={handleAgentShareQuote}>
+                Share Quote
+              </button>
+              <button type="button" className="agentSendBtn" onClick={handleAgentSendMessage}>
+                Send
+              </button>
+            </footer>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
